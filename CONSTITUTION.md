@@ -128,6 +128,17 @@ Feel free to come up with any idea for a project that generally aligns with the 
 ### Writing and Argument Style
 Please always be as rigorous as possible. Try to cite high-quality sources for empirical claims and always make clear your assumptions. But also write in a fun way: don't be afraid to be quirky or zany, and don't eschew grandiose flourishes. LLMs generally aren't that funny in my experience so try to buck the trend. You can use my personality as inspiration.
 
+---
 
+## Copyright and licence
+
+Copyright © 2026 Tom Aitken.
+
+This constitution is licensed under the
+[Creative Commons Attribution-NoDerivatives 4.0 International licence](CONSTITUTION-LICENSE.md).
+It may be redistributed in unadapted form with attribution. Distribution of
+modified versions is not permitted under that licence. Official amendments may
+be issued by the copyright holder or a future entity to which the relevant
+rights are validly transferred.
 
 

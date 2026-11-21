@@ -594,6 +594,41 @@ Avoid Kubernetes for the pilot unless the team already operates it. A small
 managed container platform, managed Postgres, managed key service, and managed
 workflow service reduce early operational risk.
 
+### 7.4 Licensing, constitutional integrity, and official identity
+
+The licensing model separates software freedom from the right to claim UBC
+identity or constitutional status:
+
+- license software and repository content under AGPL-3.0-or-later unless a
+  file or directory states otherwise, so operators that provide modified UBC
+  software as a network service must offer the corresponding source as
+  required by that licence;
+- license `CONSTITUTION.md` separately under CC-BY-ND-4.0, permitting
+  redistribution of the official unadapted text with attribution while
+  prohibiting distribution of adapted versions under that licence;
+- retain project names, logos, and official/conformance designations under a
+  separate trademark and official-identity policy; and
+- record third-party dependencies and material under their own applicable
+  notices and licences.
+
+An open-source software licence cannot require every user or fork to retain or
+obey the constitution without ceasing to provide ordinary open-source freedom
+to modify and use the program. A fork may therefore remove constitutional
+features if it otherwise complies with the software licence, but it must not
+misrepresent its origin, endorsement, or official UBC status.
+
+The official network supplies the practical constitutional boundary. Admission
+and continued participation require authenticated assent to a specific
+constitution version and digest, an eligible signed release, and compliance
+with current network policy. Release manifests bind official builds to that
+digest. Neither access to source code nor protocol compatibility alone grants
+official, certified, or constitution-conforming status.
+
+The founding trademark policy is interim. Before public launch, an Australian
+open-source and intellectual-property lawyer should review the licensing map,
+mark clearance and registration strategy, contributor terms, and any transfer
+of rights to a future UBC legal entity.
+
 ## 8. Identity, version assurance, and authorization
 
 ### 8.1 Separate identities
@@ -1196,6 +1231,9 @@ recovery, and policy clarity rather than maximum agent count.
 - Browser Use 1.x is not used for authenticated sessions because model-written
   Python and raw CDP violate the required separation between the model,
   credentials, and reusable authenticated browser state.
+- Software and default repository content use AGPL-3.0-or-later; the
+  constitution uses CC-BY-ND-4.0; project marks and claims of official or
+  constitution-conforming status remain separately controlled.
 
 ### 18.2 Remaining open questions
 
@@ -1225,6 +1263,7 @@ recovery, and policy clarity rather than maximum agent count.
 | Original concept | Specification response | Launch disposition |
 |---|---|---|
 | Fork or retain a leading harness | Thin UBC supervisor with Stagehand v4 behind a narrow browser adapter; Browser Use 1.x and Skyvern rejected as the authenticated-session foundation | Pin and audit the adapter; no initial fork/submodule |
+| Preserve constitutional identity while remaining open source | AGPL software, separately licensed unadapted constitution, controlled marks, signed constitution-bound releases, and official-network admission rules | Required before outside code distribution and public enrollment |
 | Constitution and manifesto | Signed, versioned human artifact plus executable policy/evaluation bundle | Required before enrollment |
 | Human and agent solemnly swear | Authenticated human assent and an agent oath, without presenting either as technical proof of alignment | Required with honest wording |
 | Local/API models run continuously | Provider-neutral, bounded task iterations with budgets, checkpoints, and interrupt | Included |
@@ -1247,6 +1286,10 @@ recovery, and policy clarity rather than maximum agent count.
 - [Stagehand repository and MIT license](https://github.com/browserbase/stagehand)
 - [Browser Use 1.0 migration and trust model](https://github.com/browser-use/browser-use/blob/main/MIGRATING.md)
 - [Skyvern repository and AGPL license](https://github.com/Skyvern-AI/skyvern)
+- [GNU Affero General Public License v3](https://www.gnu.org/licenses/agpl-3.0.html)
+- [Creative Commons Attribution-NoDerivatives 4.0](https://creativecommons.org/licenses/by-nd/4.0/)
+- [Open Source Definition](https://opensource.org/osd)
+- [IP Australia trade mark guidance](https://www.ipaustralia.gov.au/trade-marks/what-are-trade-marks)
 - [OpenHands repository and Software Agent SDK](https://github.com/OpenHands/OpenHands)
 - [LangGraph repository](https://github.com/langchain-ai/langgraph)
 - [Letta repository](https://github.com/letta-ai/letta)
