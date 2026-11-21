@@ -18,15 +18,6 @@ it under the applicable project licence and agree that it may be distributed
 under that licence. Contributors retain copyright in their contributions
 unless a separate written agreement says otherwise.
 
-Commits should include a Developer Certificate of Origin sign-off:
-
-```text
-Signed-off-by: Your Name <your.email@example.com>
-```
-
-Add it with `git commit -s`. The sign-off certifies the
-[Developer Certificate of Origin 1.1](https://developercertificate.org/).
-
 ## Constitution proposals
 
 `CONSTITUTION.md` is separately licensed under CC-BY-ND-4.0. Suggestions and
