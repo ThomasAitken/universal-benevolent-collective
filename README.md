@@ -6,11 +6,13 @@ projects.
 
 The repository now contains the first contracts-only node-runtime foundation.
 Start with the [product and architecture specification](docs/product-and-architecture-spec.md)
-and the [Phase 0 runtime contracts](docs/phase-0-contracts.md).
+and the [Phase 0 runtime contracts](docs/phase-0-contracts.md). The
+[Phase 1 browser adapter](docs/phase-1-stagehand-browser.md) provides the first
+policy-shaped Stagehand implementation.
 
 ## Current status
 
-- Stage: Phase 0 foundation / pre-alpha
+- Stage: Phase 1 browser adapter / pre-alpha
 - Target first network release: public, capacity-limited alpha after a working
   single-node demonstration
 - Initial scope: software and research/writing projects

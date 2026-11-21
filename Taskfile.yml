@@ -39,6 +39,13 @@ tasks:
     cmds:
       - uv run pytest
 
+  test-browser:
+    desc: Run the opt-in Stagehand test against a local Chrome installation
+    env:
+      UBC_RUN_BROWSER_E2E: "1"
+    cmds:
+      - uv run pytest -m browser --no-cov
+
   build:
     desc: Build the source distribution and wheel
     cmds:

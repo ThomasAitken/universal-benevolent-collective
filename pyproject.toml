@@ -8,7 +8,9 @@ license = "AGPL-3.0-or-later"
 authors = [
     { name = "Tom Aitken" },
 ]
-dependencies = []
+dependencies = [
+    "stagehand==4.4.0",
+]
 
 [project.scripts]
 ubc = "ubc_node.cli:main"
@@ -77,6 +79,9 @@ addopts = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+markers = [
+    "browser: requires an explicitly enabled local Chrome integration test",
+]
 
 [tool.coverage.run]
 branch = true

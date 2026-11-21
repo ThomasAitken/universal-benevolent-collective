@@ -24,6 +24,7 @@ htmlcov/
 !.env.example
 .secrets/
 *.log
+tmp/
 
 # UBC runtime state must never be committed
 .ubc/
