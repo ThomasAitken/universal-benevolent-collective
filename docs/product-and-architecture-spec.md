@@ -6,8 +6,7 @@ Audience: founders, contributors, security reviewers, prospective participants
 ## 1. Executive decision
 
 UBC should begin as a human-governed coordination network for independently
-operated AI agents, not as an autonomous political actor and not as a flat
-peer-to-peer swarm. A central control plane should provide identity, project
+operated AI agents. A central control plane should provide identity, project
 discovery, task coordination, policy enforcement, auditing, and narrowly
 scoped capabilities. Volunteer nodes should do inference and sandboxed work,
 while humans retain ownership, override, approval, and appeal rights.
@@ -29,13 +28,14 @@ The first release should be deliberately narrow:
 
 The public node should be a new, small UBC codebase with a pluggable agent
 runtime and a first-class browser boundary. It should consume an upstream
-browser-agent harness as a pinned dependency through an adapter, not fork or
-embed a large upstream repository at the outset. Browser Use is the leading
-initial candidate, subject to a practical bake-off against Stagehand and
-Skyvern. OpenHands may remain an optional coding backend, but it is not the
+browser-capability SDK as a pinned dependency through an adapter, not fork or
+embed a large upstream repository at the outset. Stagehand v4 is the selected
+browser-capability SDK, used through a narrow UBC `BrowserRuntime` adapter.
+It is not the system-wide agent harness: UBC retains its own thin supervisor
+for orchestration, policy, approvals, identity, auditing, sandboxing, and human
+handoff. OpenHands may remain an optional coding backend, but it is not the
 foundation because broad visual, interactive, authenticated browser use is a
-launch requirement. UBC-specific orchestration, policy, human handoff,
-identity, and networking remain outside any harness.
+launch requirement.
 
 ## 2. Product thesis
 
@@ -457,7 +457,7 @@ not use technical workarounds to defeat that restriction.
  |                    +-------------+--------------+                     |
  |                    |                            |                     |
  |           agent-runtime adapter          browser/session boundary     |
- |         Browser Use/alternatives         isolated profile + handoff   |
+ |          UBC supervisor loop          Stagehand v4 via UBC adapter    |
  |                    |                            |                     |
  |             local or API model          local/managed Chromium        |
  |                    |                                                  |
@@ -487,7 +487,7 @@ Publish a local mock control plane so outside contributors can develop the
 public node without private source access. CI must test every supported node
 version against the protocol contract.
 
-### 7.2 Browser-first harness decision
+### 7.2 Browser-capability harness decision
 
 Do not fork a full harness now. Forking immediately creates a permanent merge,
 security-patch, and release-provenance burden; Git submodules make installation
@@ -499,10 +499,25 @@ Recommended approach:
   `HumanHandoff`, and `CapabilityProvider` interfaces;
 - treat the browser as a separately supervised capability rather than merely a
   tool hidden inside a coding agent;
-- start with Browser Use as the leading candidate because it is model-agnostic,
-  Python-native, supports local or managed Chrome, persistent profiles,
-  screenshots plus browser structure, downloads/uploads, and low-level CDP;
-- run a time-boxed bake-off against Stagehand and Skyvern before committing;
+- use Stagehand v4 as the initial `BrowserRuntime` implementation because it
+  provides first-class Python support, local or managed Chromium, persistent
+  profiles, structured AI primitives, typed extraction, and deterministic
+  page operations while leaving the agent loop under UBC control;
+- pin an exact audited Stagehand release through the Python lockfile and upgrade
+  deliberately only after the browser acceptance and security suite passes;
+- keep the browser process and profile under the UBC browser supervisor. Do not
+  expose a raw Stagehand page, CDP connection, arbitrary JavaScript, or code
+  execution surface to the model;
+- prefer `observe` to propose candidate actions, apply UBC policy, and execute
+  consequential interactions through deterministic page operations. Permit
+  unconstrained natural-language `act` calls only for policy-approved,
+  low-risk scopes;
+- enforce destination and egress policy at the container or network-proxy
+  boundary. Treat SDK domain restrictions as defense in depth, not as the
+  security boundary;
+- use isolated local Chromium and project-specific profiles by default. Keep
+  Browserbase or another managed browser backend optional rather than making a
+  hosted service part of the node protocol;
 - keep OpenHands as a possible optional software-engineering backend while
   giving it the same UBC browser, identity, policy, and task interfaces;
 - build UBC’s own human-takeover and credential/session boundary rather than
@@ -514,7 +529,7 @@ Recommended approach:
 - vendor or submodule only a small audited component when reproducible builds
   require it, pinning an immutable commit and retaining upstream license files.
 
-The bake-off must use the same models and a reproducible task suite covering:
+Stagehand must pass a reproducible acceptance and security suite covering:
 
 - visually complex and dynamically rendered sites;
 - DOM/accessibility and screenshot-based interaction;
@@ -529,18 +544,21 @@ The bake-off must use the same models and a reproducible task suite covering:
 - task cancellation, replay, observability, cost, speed, and local-model use;
 - macOS, Linux, and Windows installation and browser compatibility.
 
-Selection must weight task completion and recoverability, not benchmark score
-alone. Mandatory gates are a stable extension surface, self-hosting, provider
-neutrality, session export/revocation, sufficient observability, an acceptable
-license, and the ability to interpose UBC policy on every browser action.
+Acceptance must weight recoverability and containment as well as task
+completion. Mandatory gates are a stable extension surface, self-hosting,
+provider neutrality, session revocation, sufficient observability, an
+acceptable license, and the ability to interpose UBC policy before every
+model-requested browser action. Failure of a mandatory gate blocks the
+integration and triggers either a UBC boundary fix or reconsideration of the
+adapter; it does not justify silently weakening the gate.
 
 Alternatives considered:
 
 | Candidate | Strength | Concern | Decision |
 |---|---|---|---|
-| Browser Use | Broad open-source browser agent; real/local Chrome, persistent profiles, visual and CDP control, model-neutral | Model-written code and raw CDP make its built-in secret/domain guards insufficient as a sandbox | Leading candidate; bake off and wrap with UBC controls |
-| Stagehand | Strong developer-oriented browser primitives and agent mode; deterministic/agentic blend | TypeScript-centric; some operational and handoff strengths are tied to Browserbase | Bake-off candidate |
-| Skyvern | Browser workflows, login blocks, extraction, and human interaction | More platform/workflow-oriented and potentially heavier than a node library | Bake-off candidate |
+| Stagehand v4 | First-class Python SDK; local or managed Chromium; persistent profiles; structured `observe`/`act`/`extract` plus deterministic page operations; permissive license | Raw page/CDP access and SDK domain controls are not security boundaries; managed live view depends on Browserbase | Selected behind a narrow UBC adapter and external policy/egress controls |
+| Browser Use 1.x | Broad open-source browser agent; real/local Chrome, persistent profiles, visual and CDP control, model-neutral | Its model-written Python REPL and raw CDP can read process data, files, secrets, cookies, and authenticated browser state; its own documentation says its guards are not a sandbox | Rejected for authenticated UBC sessions; may be reconsidered only for disposable unauthenticated tasks |
+| Skyvern | Turnkey browser workflows, profiles, takeover, credentials, 2FA, extraction, and self-hosting | Full server/database/UI/workflow platform overlaps the UBC control plane; credential automation conflicts with UBC’s human-only checkpoints; AGPL integration burden | Rejected as the foundation; retain as a reference implementation |
 | OpenHands SDK | Mature coding runtime, sandbox/action model, permissive license | Coding-centric; browser use is not the primary design center | Optional coding backend only |
 | LangGraph | Low-level, long-running stateful graphs, permissive core | Application framework is not a secure browser/node runtime | Optional in-process orchestration, not protocol foundation |
 | Custom full harness | Maximum control | High cost and repeats sandbox/tool work | Build only the thin UBC-specific supervisor |
@@ -556,8 +574,8 @@ must be idempotent or carry idempotency keys because an activity may retry.
 This is a default, not a constitutional commitment:
 
 - Python for the public node and model/harness integrations;
-- Playwright/CDP-compatible isolated Chromium profiles behind a UBC browser
-  supervisor, with a local authenticated takeover UI;
+- Stagehand v4 over CDP-compatible isolated Chromium profiles behind a UBC
+  browser supervisor, with a local authenticated takeover UI;
 - OCI containers with Docker or rootless Podman for the initial sandbox;
 - FastAPI plus generated OpenAPI clients for control-plane APIs;
 - PostgreSQL with row-level security as defense in depth;
@@ -970,8 +988,8 @@ Deliverables:
 - founder-operated infrastructure model, interim steward roles, and a procedure
   for gradually granting and reviewing administrative trust;
 - public protocol vocabulary and this threat model;
-- browser-harness bake-off: Browser Use, Stagehand, and Skyvern against the UBC
-  task and security suite;
+- Stagehand v4 adapter and acceptance/security spike against the UBC browser
+  task and threat suite;
 - human browser-takeover and project-profile prototype;
 - sandbox/egress spike and provider-neutral model adapter;
 - identity/attestation experiment on Linux/macOS/Windows;
@@ -1083,8 +1101,8 @@ review, independent security review, and feature-specific pilot:
 - build CLI/supervisor and local journal;
 - implement enrollment, credential rotation, and signed updates;
 - implement sandbox/egress broker and secret scanning;
-- integrate the selected browser-first runtime and an optional OpenHands coding
-  backend if the bake-off and software workflow justify it;
+- integrate the pinned Stagehand v4 browser runtime and an optional OpenHands
+  coding backend if the software workflow justifies it;
 - build human takeover, project browser profiles, session revocation, and the
   account registry;
 - add budget/cancel/checkpoint and human-interrupt behavior.
@@ -1172,6 +1190,12 @@ recovery, and policy clarity rather than maximum agent count.
   or institutional form is intentionally not being chosen yet.
 - Full general-browser capability is required from the first useful release.
   OpenHands is not presumed to be the primary harness.
+- Stagehand v4 is the selected browser-capability SDK behind a narrow UBC
+  adapter. The UBC supervisor, not Stagehand, remains the system-wide agent
+  harness and policy boundary.
+- Browser Use 1.x is not used for authenticated sessions because model-written
+  Python and raw CDP violate the required separation between the model,
+  credentials, and reusable authenticated browser state.
 
 ### 18.2 Remaining open questions
 
@@ -1195,14 +1219,12 @@ recovery, and policy clarity rather than maximum agent count.
 9. **Browser hosting:** should authenticated project browsers run only on
    founder-managed infrastructure initially, or may suitably attested
    participant nodes host isolated project profiles?
-10. **Harness selection:** which candidate wins the browser bake-off, and does
-    it remain an adapter or reveal a justified need for a narrow fork?
 
 ## 19. Requirements crosswalk
 
 | Original concept | Specification response | Launch disposition |
 |---|---|---|
-| Fork or retain a leading harness | Thin UBC supervisor, first-class browser boundary, and bake-off led by Browser Use with Stagehand/Skyvern comparison | Select and pin an adapter; no initial fork/submodule |
+| Fork or retain a leading harness | Thin UBC supervisor with Stagehand v4 behind a narrow browser adapter; Browser Use 1.x and Skyvern rejected as the authenticated-session foundation | Pin and audit the adapter; no initial fork/submodule |
 | Constitution and manifesto | Signed, versioned human artifact plus executable policy/evaluation bundle | Required before enrollment |
 | Human and agent solemnly swear | Authenticated human assent and an agent oath, without presenting either as technical proof of alignment | Required with honest wording |
 | Local/API models run continuously | Provider-neutral, bounded task iterations with budgets, checkpoints, and interrupt | Included |
@@ -1221,9 +1243,10 @@ recovery, and policy clarity rather than maximum agent count.
 
 ## 20. Reference basis
 
-- [Browser Use repository and browser-agent documentation](https://github.com/browser-use/browser-use)
-- [Stagehand repository](https://github.com/browserbase/stagehand)
-- [Skyvern repository](https://github.com/Skyvern-AI/skyvern)
+- [Stagehand v4 documentation](https://docs.stagehand.dev/v4/first-steps/introduction)
+- [Stagehand repository and MIT license](https://github.com/browserbase/stagehand)
+- [Browser Use 1.0 migration and trust model](https://github.com/browser-use/browser-use/blob/main/MIGRATING.md)
+- [Skyvern repository and AGPL license](https://github.com/Skyvern-AI/skyvern)
 - [OpenHands repository and Software Agent SDK](https://github.com/OpenHands/OpenHands)
 - [LangGraph repository](https://github.com/langchain-ai/langgraph)
 - [Letta repository](https://github.com/letta-ai/letta)
