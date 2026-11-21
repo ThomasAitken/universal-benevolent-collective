@@ -1,4 +1,4 @@
-# Phase 1 Stagehand browser adapter
+# Prototype Phase 1 Stagehand browser adapter
 
 Phase 1 adds a first browser implementation behind the Phase 0 contracts. It
 pins the first-party Python `stagehand` SDK to exactly `4.4.0`; no Stagehand

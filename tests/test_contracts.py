@@ -13,6 +13,7 @@ from ubc_node.contracts import (
     EventKind,
     HumanHandoff,
     JsonValue,
+    ModelUsage,
     PolicyDecision,
     PolicyOutcome,
     RunBudget,
@@ -37,19 +38,56 @@ HANDOFF = HumanHandoff(
         ("max_model_calls", 0),
         ("max_browser_actions", 0),
         ("max_handoffs", -1),
+        ("max_tokens", 0),
+        ("max_estimated_cost_usd", 0.0),
+        ("max_estimated_cost_usd", float("inf")),
+        ("max_duration_seconds", 0.0),
+        ("max_duration_seconds", float("nan")),
+        ("max_downloads", -1),
+        ("max_consecutive_failures", 0),
     ],
 )
-def test_run_budget_rejects_invalid_limits(field_name: str, value: int) -> None:
-    arguments = {
+def test_run_budget_rejects_invalid_limits(field_name: str, value: int | float) -> None:
+    arguments: dict[str, int | float] = {
         "max_steps": 1,
         "max_model_calls": 1,
         "max_browser_actions": 1,
         "max_handoffs": 0,
+        "max_tokens": 1,
+        "max_estimated_cost_usd": 0.5,
+        "max_duration_seconds": 10.0,
+        "max_downloads": 0,
+        "max_consecutive_failures": 1,
     }
     arguments[field_name] = value
 
     with pytest.raises(ValueError, match=field_name):
-        RunBudget(**arguments)
+        RunBudget(**arguments)  # pyright: ignore[reportArgumentType]
+
+
+def test_model_usage_computes_minimum_total_and_validates_fields() -> None:
+    computed = ModelUsage(input_tokens=10, output_tokens=5, estimated_cost_usd=0.001)
+    assert computed.total_tokens == 15
+    assert computed.to_record() == {
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "total_tokens": 15,
+        "estimated_cost_usd": 0.001,
+    }
+
+    explicit = ModelUsage(input_tokens=10, output_tokens=5, total_tokens=25)
+    assert explicit.total_tokens == 25
+
+    with pytest.raises(ValueError, match="input_tokens"):
+        ModelUsage(input_tokens=-1)
+    with pytest.raises(ValueError, match="output_tokens"):
+        ModelUsage(output_tokens=-1)
+    with pytest.raises(ValueError, match="total_tokens"):
+        ModelUsage(total_tokens=-1)
+    with pytest.raises(ValueError, match="estimated_cost_usd"):
+        ModelUsage(estimated_cost_usd=-0.01)
+    with pytest.raises(ValueError, match="estimated_cost_usd"):
+        ModelUsage(estimated_cost_usd=float("inf"))
 
 
 def test_task_spec_validates_text_and_freezes_metadata() -> None:

@@ -1,14 +1,23 @@
-"""Stable contracts for the Phase 0 node runtime."""
+"""Stable contracts for the UBC node runtime."""
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Protocol, Self
+from typing import Protocol, Self, runtime_checkable
 
 type JsonScalar = str | int | float | bool | None
 type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
+
+
+class AgentBackendError(RuntimeError):
+    """Raised when a model backend cannot produce a valid structured proposal."""
+
+
+class FatalRunError(RuntimeError):
+    """Base error for unrecoverable failures that must terminate a run immediately."""
 
 
 def _frozen_mapping(values: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
@@ -52,16 +61,50 @@ class PolicyOutcome(StrEnum):
 
 
 class EventKind(StrEnum):
-    """Events recorded by the Phase 0 supervisor."""
+    """Events recorded by the node supervisor."""
 
     RUN_CREATED = "run_created"
     STATE_CHANGED = "state_changed"
+    BROWSER_STATE_OBSERVED = "browser_state_observed"
     ACTION_PROPOSED = "action_proposed"
     POLICY_DECIDED = "policy_decided"
     BROWSER_ACTION_COMPLETED = "browser_action_completed"
+    STEP_FAILED = "step_failed"
     HANDOFF_REQUESTED = "handoff_requested"
     HANDOFF_COMPLETED = "handoff_completed"
     RUN_FINISHED = "run_finished"
+
+
+@dataclass(frozen=True, slots=True)
+class ModelUsage:
+    """Token and estimated cost accounting for one model call."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    estimated_cost_usd: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.input_tokens < 0:
+            raise ValueError("input_tokens must not be negative")
+        if self.output_tokens < 0:
+            raise ValueError("output_tokens must not be negative")
+        if self.total_tokens < 0:
+            raise ValueError("total_tokens must not be negative")
+        minimum_total = self.input_tokens + self.output_tokens
+        if self.total_tokens < minimum_total:
+            object.__setattr__(self, "total_tokens", minimum_total)
+        if not math.isfinite(self.estimated_cost_usd) or self.estimated_cost_usd < 0:
+            raise ValueError("estimated_cost_usd must be a non-negative finite number")
+
+    def to_record(self) -> dict[str, JsonValue]:
+        """Convert usage accounting to a JSON-compatible dictionary."""
+        return {
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
+            "estimated_cost_usd": self.estimated_cost_usd,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,13 +115,29 @@ class RunBudget:
     max_model_calls: int = 10
     max_browser_actions: int = 10
     max_handoffs: int = 2
+    max_tokens: int = 100_000
+    max_estimated_cost_usd: float = 1.0
+    max_duration_seconds: float = 300.0
+    max_downloads: int = 5
+    max_consecutive_failures: int = 3
 
     def __post_init__(self) -> None:
-        for field_name in ("max_steps", "max_model_calls", "max_browser_actions"):
+        for field_name in (
+            "max_steps",
+            "max_model_calls",
+            "max_browser_actions",
+            "max_tokens",
+            "max_consecutive_failures",
+        ):
             if getattr(self, field_name) < 1:
                 raise ValueError(f"{field_name} must be at least 1")
-        if self.max_handoffs < 0:
-            raise ValueError("max_handoffs must not be negative")
+        for field_name in ("max_handoffs", "max_downloads"):
+            if getattr(self, field_name) < 0:
+                raise ValueError(f"{field_name} must not be negative")
+        for field_name in ("max_estimated_cost_usd", "max_duration_seconds"):
+            value = getattr(self, field_name)
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{field_name} must be a positive finite number")
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +178,7 @@ class ActionProposal:
     parameters: Mapping[str, JsonValue] = field(default_factory=_empty_json_mapping)
     handoff: HumanHandoff | None = None
     output: str | None = None
+    usage: ModelUsage | None = None
 
     def __post_init__(self) -> None:
         _require_text(self.description, "description")
@@ -137,19 +197,27 @@ class ActionProposal:
         cls,
         description: str,
         parameters: Mapping[str, JsonValue] | None = None,
+        *,
+        usage: ModelUsage | None = None,
     ) -> Self:
         """Construct a browser action proposal."""
-        return cls(ActionKind.BROWSER, description, parameters or {})
+        return cls(ActionKind.BROWSER, description, parameters or {}, usage=usage)
 
     @classmethod
-    def request_handoff(cls, description: str, handoff: HumanHandoff) -> Self:
+    def request_handoff(
+        cls,
+        description: str,
+        handoff: HumanHandoff,
+        *,
+        usage: ModelUsage | None = None,
+    ) -> Self:
         """Construct a human handoff proposal."""
-        return cls(ActionKind.HUMAN_HANDOFF, description, handoff=handoff)
+        return cls(ActionKind.HUMAN_HANDOFF, description, handoff=handoff, usage=usage)
 
     @classmethod
-    def complete(cls, output: str) -> Self:
+    def complete(cls, output: str, *, usage: ModelUsage | None = None) -> Self:
         """Construct a successful completion proposal."""
-        return cls(ActionKind.COMPLETE, "Complete the task", output=output)
+        return cls(ActionKind.COMPLETE, "Complete the task", output=output, usage=usage)
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +294,13 @@ class BudgetUsage:
     model_calls: int = 0
     browser_actions: int = 0
     handoffs: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    estimated_cost_usd: float = 0.0
+    duration_seconds: float = 0.0
+    downloads: int = 0
+    consecutive_failures: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,6 +344,15 @@ class BrowserRuntime(Protocol):
 
     async def handoff(self, request: HumanHandoff) -> Mapping[str, JsonValue]:
         """Yield control to a human and return only after control is returned."""
+        ...
+
+
+@runtime_checkable
+class BrowserStateObserver(Protocol):
+    """Optional capability for observing current browser state before proposing."""
+
+    async def observe_state(self) -> Mapping[str, JsonValue]:
+        """Return a bounded, JSON-compatible snapshot of current browser state."""
         ...
 
 

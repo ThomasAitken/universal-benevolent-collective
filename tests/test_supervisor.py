@@ -1,7 +1,7 @@
 """Deterministic scenarios for the Phase 0 run supervisor."""
 
-from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
+from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -15,10 +15,14 @@ from tests.fakes import (
 from ubc_node.contracts import (
     ActionProposal,
     EventKind,
+    FatalRunError,
     HumanHandoff,
+    JsonValue,
+    ModelUsage,
     PolicyDecision,
     PolicyOutcome,
     RunBudget,
+    RunEvent,
     RunState,
     TaskSpec,
 )
@@ -266,10 +270,14 @@ async def test_each_budget_is_enforced_deterministically(
 async def test_backend_failure_becomes_failed_result_and_event() -> None:
     supervisor, _, sink, _ = _supervisor([])
 
-    result = await supervisor.run(_task())
+    result = await supervisor.run(_task(budget=RunBudget(max_consecutive_failures=1)))
 
     assert result.state is RunState.FAILED
-    assert result.error == "RuntimeError: scripted agent has no proposal remaining"
+    assert (
+        result.error
+        == "consecutive-failure budget exhausted: RuntimeError: scripted agent has no proposal remaining"
+    )
+    assert result.usage.consecutive_failures == 1
     assert sink.events[-1].payload["error"] == result.error
 
 
@@ -287,3 +295,265 @@ async def test_default_clock_and_run_id_factories_produce_valid_metadata() -> No
 
     assert UUID(result.run_id).version == 4
     assert all(event.occurred_at.tzinfo is not None for event in sink.events)
+
+
+@pytest.mark.asyncio
+async def test_token_and_cost_budgets_are_enforced_before_and_after_model_calls() -> None:
+    heavy_usage = ModelUsage(input_tokens=60, output_tokens=50, estimated_cost_usd=0.05)
+    supervisor, browser, sink, _ = _supervisor(
+        [ActionProposal.browser("Browse", usage=heavy_usage)]
+    )
+    result = await supervisor.run(_task(budget=RunBudget(max_tokens=100)))
+    assert result.state is RunState.FAILED
+    assert result.error == "token budget exhausted"
+    assert result.usage.total_tokens == 110
+    assert browser.actions == []
+    proposed = next(e for e in sink.events if e.kind is EventKind.ACTION_PROPOSED)
+    assert proposed.payload["usage"] == heavy_usage.to_record()
+
+    exact_tokens = ModelUsage(input_tokens=50, output_tokens=50, estimated_cost_usd=0.01)
+    supervisor2, _, _, _ = _supervisor(
+        [
+            ActionProposal.browser("Step 1", usage=exact_tokens),
+            ActionProposal.complete("never reached"),
+        ]
+    )
+    result2 = await supervisor2.run(_task(budget=RunBudget(max_tokens=100)))
+    assert result2.state is RunState.FAILED
+    assert result2.error == "token budget exhausted"
+    assert result2.usage.model_calls == 1
+
+    over_cost = ModelUsage(input_tokens=10, output_tokens=10, estimated_cost_usd=0.60)
+    supervisor3, _, _, _ = _supervisor([ActionProposal.browser("Browse", usage=over_cost)])
+    result3 = await supervisor3.run(_task(budget=RunBudget(max_estimated_cost_usd=0.50)))
+    assert result3.state is RunState.FAILED
+    assert result3.error == "cost budget exhausted"
+
+    exact_cost = ModelUsage(input_tokens=10, output_tokens=10, estimated_cost_usd=0.50)
+    supervisor4, _, _, _ = _supervisor(
+        [
+            ActionProposal.browser("Step 1", usage=exact_cost),
+            ActionProposal.complete("never reached"),
+        ]
+    )
+    result4 = await supervisor4.run(_task(budget=RunBudget(max_estimated_cost_usd=0.50)))
+    assert result4.state is RunState.FAILED
+    assert result4.error == "cost budget exhausted"
+    assert result4.usage.model_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_download_budget_is_enforced_independently() -> None:
+    download_action = ActionProposal.browser(
+        "Download report", {"operation": "download", "candidate_id": "c-1"}
+    )
+    supervisor, browser, _, _ = _supervisor([download_action, download_action])
+    result = await supervisor.run(_task(budget=RunBudget(max_downloads=1)))
+
+    assert result.state is RunState.FAILED
+    assert result.error == "download budget exhausted"
+    assert result.usage.downloads == 1
+    assert result.usage.browser_actions == 1
+    assert len(browser.actions) == 1
+
+
+@pytest.mark.asyncio
+async def test_consecutive_failures_recover_on_success_and_stop_at_limit() -> None:
+    class FlakyAgent:
+        def __init__(self, responses: Sequence[ActionProposal | Exception]) -> None:
+            self._responses = list(responses)
+
+        async def propose(
+            self,
+            task: TaskSpec,
+            history: Sequence[RunEvent],
+        ) -> ActionProposal:
+            del task, history
+            item = self._responses.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+    sink = MemoryEventSink()
+    agent = FlakyAgent(
+        [
+            ValueError("bad proposal 1"),
+            ActionProposal.browser("Recovering action", {"operation": "inspect"}),
+            ValueError("bad proposal 2"),
+            ActionProposal.complete("recovered"),
+        ]
+    )
+    supervisor = RunSupervisor(
+        agent=agent,
+        browser=FakeBrowserRuntime(),
+        policy=ScriptedPolicyEvaluator(),
+        event_sink=sink,
+        clock=lambda: NOW,
+        run_id_factory=lambda: "run-recover",
+    )
+
+    result = await supervisor.run(_task(budget=RunBudget(max_consecutive_failures=2)))
+    assert result.state is RunState.COMPLETED
+    assert result.output == "recovered"
+    assert result.usage.consecutive_failures == 0
+    step_failures = [e for e in sink.events if e.kind is EventKind.STEP_FAILED]
+    assert len(step_failures) == 2
+
+
+@pytest.mark.asyncio
+async def test_fatal_error_and_handoff_error_fail_immediately_without_retry() -> None:
+    class FatalAgent:
+        async def propose(
+            self,
+            task: TaskSpec,
+            history: Sequence[RunEvent],
+        ) -> ActionProposal:
+            del task, history
+            raise FatalRunError("revoked session")
+
+    sink = MemoryEventSink()
+    supervisor = RunSupervisor(
+        agent=FatalAgent(),
+        browser=FakeBrowserRuntime(),
+        policy=ScriptedPolicyEvaluator(),
+        event_sink=sink,
+        clock=lambda: NOW,
+        run_id_factory=lambda: "run-fatal",
+    )
+    result = await supervisor.run(_task(budget=RunBudget(max_consecutive_failures=3)))
+    assert result.state is RunState.FAILED
+    assert result.error == "FatalRunError: revoked session"
+    assert result.usage.model_calls == 1
+
+    class FailingHandoffBrowser(FakeBrowserRuntime):
+        async def handoff(self, request: HumanHandoff) -> Mapping[str, JsonValue]:
+            del request
+            raise RuntimeError("human declined control")
+
+    supervisor2, _, _, _ = _supervisor(
+        [ActionProposal.request_handoff("Login", HANDOFF)],
+        browser=FailingHandoffBrowser(),
+    )
+    result2 = await supervisor2.run(_task(budget=RunBudget(max_consecutive_failures=3)))
+    assert result2.state is RunState.FAILED
+    assert result2.error == "RuntimeError: human declined control"
+    assert result2.usage.handoffs == 1
+
+
+@pytest.mark.asyncio
+async def test_browser_state_observer_and_duration_budgets_are_enforced() -> None:
+    class ObservingBrowser(FakeBrowserRuntime):
+        def __init__(self, *, on_observe: Callable[[], None] | None = None) -> None:
+            super().__init__()
+            self._on_observe = on_observe
+
+        async def observe_state(self) -> Mapping[str, JsonValue]:
+            if self._on_observe is not None:
+                self._on_observe()
+            return {"session_state": "active", "tabs": [], "active_page": None}
+
+    # Normal observation before proposal
+    sink = MemoryEventSink()
+    supervisor = RunSupervisor(
+        agent=ScriptedAgentBackend([ActionProposal.complete("done")]),
+        browser=ObservingBrowser(),
+        policy=ScriptedPolicyEvaluator(),
+        event_sink=sink,
+        clock=lambda: NOW,
+        run_id_factory=lambda: "run-obs",
+    )
+    result = await supervisor.run(_task())
+    assert result.state is RunState.COMPLETED
+    assert any(e.kind is EventKind.BROWSER_STATE_OBSERVED for e in sink.events)
+
+    # Cancellation right after observe_state
+    token = CancellationToken()
+    supervisor_cancel = RunSupervisor(
+        agent=ScriptedAgentBackend([ActionProposal.complete("never")]),
+        browser=ObservingBrowser(on_observe=token.cancel),
+        policy=ScriptedPolicyEvaluator(),
+        event_sink=MemoryEventSink(),
+        clock=lambda: NOW,
+        run_id_factory=lambda: "run-obs-cancel",
+    )
+    res_cancel = await supervisor_cancel.run(_task(), cancellation=token)
+    assert res_cancel.state is RunState.CANCELLED
+    assert res_cancel.usage.model_calls == 0
+
+    # Duration exhausted at loop entry
+    times = iter([NOW, NOW, NOW, NOW + timedelta(seconds=10), NOW + timedelta(seconds=10)])
+    last_time = NOW
+
+    def advancing_clock() -> datetime:
+        nonlocal last_time
+        last_time = next(times, last_time)
+        return last_time
+
+    supervisor_dur_start = RunSupervisor(
+        agent=ScriptedAgentBackend([ActionProposal.complete("never")]),
+        browser=FakeBrowserRuntime(),
+        policy=ScriptedPolicyEvaluator(),
+        event_sink=MemoryEventSink(),
+        clock=advancing_clock,
+        run_id_factory=lambda: "run-dur-start",
+    )
+    res_dur_start = await supervisor_dur_start.run(
+        _task(budget=RunBudget(max_duration_seconds=5.0))
+    )
+    assert res_dur_start.state is RunState.FAILED
+    assert res_dur_start.error == "duration budget exhausted"
+    assert res_dur_start.usage.duration_seconds == 10.0
+
+    # Duration exhausted right after observe_state
+    now_ref = [NOW]
+
+    def bump_after_observe() -> None:
+        now_ref[0] = NOW + timedelta(seconds=10)
+
+    supervisor_dur_obs = RunSupervisor(
+        agent=ScriptedAgentBackend([ActionProposal.complete("never")]),
+        browser=ObservingBrowser(on_observe=bump_after_observe),
+        policy=ScriptedPolicyEvaluator(),
+        event_sink=MemoryEventSink(),
+        clock=lambda: now_ref[0],
+        run_id_factory=lambda: "run-dur-obs",
+    )
+    res_dur_obs = await supervisor_dur_obs.run(_task(budget=RunBudget(max_duration_seconds=5.0)))
+    assert res_dur_obs.state is RunState.FAILED
+    assert res_dur_obs.error == "duration budget exhausted"
+    assert res_dur_obs.usage.model_calls == 0
+
+    # Duration exhausted right after model propose
+    now_ref2 = [NOW]
+    supervisor_dur_prop = RunSupervisor(
+        agent=ScriptedAgentBackend(
+            [ActionProposal.complete("late")],
+            on_propose=lambda _: now_ref2.__setitem__(0, NOW + timedelta(seconds=10)),
+        ),
+        browser=FakeBrowserRuntime(),
+        policy=ScriptedPolicyEvaluator(),
+        event_sink=MemoryEventSink(),
+        clock=lambda: now_ref2[0],
+        run_id_factory=lambda: "run-dur-prop",
+    )
+    res_dur_prop = await supervisor_dur_prop.run(_task(budget=RunBudget(max_duration_seconds=5.0)))
+    assert res_dur_prop.state is RunState.FAILED
+    assert res_dur_prop.error == "duration budget exhausted"
+    assert res_dur_prop.usage.model_calls == 1
+
+    # Duration exhausted right after handoff
+    now_ref3 = [NOW]
+    supervisor_dur_ho = RunSupervisor(
+        agent=ScriptedAgentBackend([ActionProposal.request_handoff("Login", HANDOFF)]),
+        browser=FakeBrowserRuntime(
+            on_handoff=lambda _: now_ref3.__setitem__(0, NOW + timedelta(seconds=10))
+        ),
+        policy=ScriptedPolicyEvaluator(),
+        event_sink=MemoryEventSink(),
+        clock=lambda: now_ref3[0],
+        run_id_factory=lambda: "run-dur-ho",
+    )
+    res_dur_ho = await supervisor_dur_ho.run(_task(budget=RunBudget(max_duration_seconds=5.0)))
+    assert res_dur_ho.state is RunState.FAILED
+    assert res_dur_ho.error == "duration budget exhausted"
+    assert res_dur_ho.usage.handoffs == 1

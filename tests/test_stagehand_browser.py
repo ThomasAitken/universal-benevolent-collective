@@ -116,6 +116,28 @@ async def test_navigation_requires_approved_http_origin_and_revokes_after_redire
 
 
 @pytest.mark.asyncio
+async def test_observe_state_handles_blank_active_and_inactive_sessions(tmp_path: Path) -> None:
+    blank_page = FakePage("page-1", "about:blank", title="Blank")
+    adapter, _, _, _, _ = _adapter(tmp_path, page=blank_page)
+
+    blank_state = await adapter.observe_state()
+    assert blank_state["session_state"] == "active"
+    assert blank_state["active_page"] is None
+    assert len(cast(list[JsonValue], blank_state["tabs"])) == 1
+
+    await adapter.open_url(f"{ORIGIN}/docs")
+    active_state = await adapter.observe_state()
+    assert active_state["session_state"] == "active"
+    active_page = cast(dict[str, JsonValue], active_state["active_page"])
+    assert active_page["url"] == f"{ORIGIN}/docs"
+    assert active_page["untrusted"] is True
+
+    await adapter.pause()
+    paused_state = await adapter.observe_state()
+    assert paused_state == {"session_state": "paused", "tabs": [], "active_page": None}
+
+
+@pytest.mark.asyncio
 async def test_non_http_page_reached_by_browser_is_revoked(tmp_path: Path) -> None:
     adapter, page, _, _, _ = _adapter(tmp_path)
     page.current_url = "about:blank"

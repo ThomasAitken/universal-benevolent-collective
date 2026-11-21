@@ -1,4 +1,4 @@
-# Phase 0 runtime contracts
+# Prototype Phase 0 runtime contracts
 
 Phase 0 establishes the node supervisor's boundaries before choosing a real
 model provider or browser harness. The implementation deliberately uses only

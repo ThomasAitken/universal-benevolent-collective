@@ -1,4 +1,4 @@
-"""Bounded Phase 0 supervisor built entirely against contracts."""
+"""Bounded node supervisor built entirely against contracts."""
 
 from collections.abc import Callable, Mapping
 from dataclasses import replace
@@ -9,9 +9,11 @@ from ubc_node.contracts import (
     ActionKind,
     AgentBackend,
     BrowserRuntime,
+    BrowserStateObserver,
     BudgetUsage,
     EventKind,
     EventSink,
+    FatalRunError,
     HumanHandoff,
     JsonValue,
     PolicyDecision,
@@ -70,9 +72,13 @@ class RunSupervisor:
         """Execute a task until it reaches one explicit terminal state."""
         token = cancellation or CancellationToken()
         run_id = self._run_id_factory()
+        started_at = self._clock()
         machine = RunStateMachine()
         history: list[RunEvent] = []
         usage: BudgetUsage = BudgetUsage()
+
+        def elapsed_seconds() -> float:
+            return max(0.0, (self._clock() - started_at).total_seconds())
 
         def emit(kind: EventKind, payload: Mapping[str, JsonValue]) -> None:
             event = RunEvent(
@@ -100,6 +106,8 @@ class RunSupervisor:
             output: str | None = None,
             error: str | None = None,
         ) -> RunResult:
+            nonlocal usage
+            usage = replace(usage, duration_seconds=elapsed_seconds())
             transition(state)
             payload: dict[str, JsonValue] = {"state": state.value}
             if output is not None:
@@ -125,6 +133,11 @@ class RunSupervisor:
                 "max_model_calls": task.budget.max_model_calls,
                 "max_browser_actions": task.budget.max_browser_actions,
                 "max_handoffs": task.budget.max_handoffs,
+                "max_tokens": task.budget.max_tokens,
+                "max_estimated_cost_usd": task.budget.max_estimated_cost_usd,
+                "max_duration_seconds": task.budget.max_duration_seconds,
+                "max_downloads": task.budget.max_downloads,
+                "max_consecutive_failures": task.budget.max_consecutive_failures,
             },
         )
         transition(RunState.RUNNING)
@@ -132,28 +145,58 @@ class RunSupervisor:
         while True:
             if token.cancelled:
                 return finish(RunState.CANCELLED, error="cancellation requested")
+            if elapsed_seconds() >= task.budget.max_duration_seconds:
+                return finish(RunState.FAILED, error="duration budget exhausted")
             if usage.steps >= task.budget.max_steps:
                 return finish(RunState.FAILED, error="step budget exhausted")
             if usage.model_calls >= task.budget.max_model_calls:
                 return finish(RunState.FAILED, error="model-call budget exhausted")
+            if usage.total_tokens >= task.budget.max_tokens:
+                return finish(RunState.FAILED, error="token budget exhausted")
+            if usage.estimated_cost_usd >= task.budget.max_estimated_cost_usd:
+                return finish(RunState.FAILED, error="cost budget exhausted")
 
-            usage = replace(
-                usage,
-                steps=usage.steps + 1,
-                model_calls=usage.model_calls + 1,
-            )
+            usage = replace(usage, steps=usage.steps + 1)
             try:
+                if isinstance(self._browser, BrowserStateObserver):
+                    browser_state = await self._browser.observe_state()
+                    emit(
+                        EventKind.BROWSER_STATE_OBSERVED,
+                        {"browser": dict(browser_state)},
+                    )
+                    if token.cancelled:
+                        return finish(RunState.CANCELLED, error="cancellation requested")
+                    if elapsed_seconds() >= task.budget.max_duration_seconds:
+                        return finish(RunState.FAILED, error="duration budget exhausted")
+
+                usage = replace(usage, model_calls=usage.model_calls + 1)
                 proposal = await self._agent.propose(task, tuple(history))
-                emit(
-                    EventKind.ACTION_PROPOSED,
-                    {
-                        "kind": proposal.kind.value,
-                        "description": proposal.description,
-                        "parameters": dict(proposal.parameters),
-                    },
-                )
+                proposal_payload: dict[str, JsonValue] = {
+                    "kind": proposal.kind.value,
+                    "description": proposal.description,
+                    "parameters": dict(proposal.parameters),
+                }
+                if proposal.usage is not None:
+                    usage = replace(
+                        usage,
+                        input_tokens=usage.input_tokens + proposal.usage.input_tokens,
+                        output_tokens=usage.output_tokens + proposal.usage.output_tokens,
+                        total_tokens=usage.total_tokens + proposal.usage.total_tokens,
+                        estimated_cost_usd=round(
+                            usage.estimated_cost_usd + proposal.usage.estimated_cost_usd,
+                            8,
+                        ),
+                    )
+                    proposal_payload["usage"] = proposal.usage.to_record()
+                emit(EventKind.ACTION_PROPOSED, proposal_payload)
                 if token.cancelled:
                     return finish(RunState.CANCELLED, error="cancellation requested")
+                if elapsed_seconds() >= task.budget.max_duration_seconds:
+                    return finish(RunState.FAILED, error="duration budget exhausted")
+                if usage.total_tokens > task.budget.max_tokens:
+                    return finish(RunState.FAILED, error="token budget exhausted")
+                if usage.estimated_cost_usd > task.budget.max_estimated_cost_usd:
+                    return finish(RunState.FAILED, error="cost budget exhausted")
 
                 decision = await self._policy.evaluate(task, proposal)
                 emit(
@@ -178,28 +221,57 @@ class RunSupervisor:
                         },
                     )
                     observation = await self._browser.handoff(handoff)
+                    usage = replace(usage, consecutive_failures=0)
                     emit(EventKind.HANDOFF_COMPLETED, {"observation": dict(observation)})
                     if token.cancelled:
                         return finish(RunState.CANCELLED, error="cancellation requested")
+                    if elapsed_seconds() >= task.budget.max_duration_seconds:
+                        return finish(RunState.FAILED, error="duration budget exhausted")
                     transition(RunState.RUNNING)
                     continue
 
                 if proposal.kind is ActionKind.COMPLETE:
+                    usage = replace(usage, consecutive_failures=0)
                     return finish(RunState.COMPLETED, output=proposal.output)
 
                 if usage.browser_actions >= task.budget.max_browser_actions:
                     return finish(RunState.FAILED, error="browser-action budget exhausted")
-                usage = replace(usage, browser_actions=usage.browser_actions + 1)
+                is_download = proposal.parameters.get("operation") == "download"
+                if is_download and usage.downloads >= task.budget.max_downloads:
+                    return finish(RunState.FAILED, error="download budget exhausted")
+                usage = replace(
+                    usage,
+                    browser_actions=usage.browser_actions + 1,
+                    downloads=usage.downloads + (1 if is_download else 0),
+                )
                 observation = await self._browser.execute(proposal)
+                usage = replace(usage, consecutive_failures=0)
                 emit(
                     EventKind.BROWSER_ACTION_COMPLETED,
                     {"observation": dict(observation)},
                 )
-            except Exception as error:
+            except FatalRunError as error:
                 return finish(
                     RunState.FAILED,
                     error=f"{type(error).__name__}: {error}",
                 )
+            except Exception as error:
+                error_text = f"{type(error).__name__}: {error}"
+                if machine.state is RunState.AWAITING_HUMAN:
+                    return finish(RunState.FAILED, error=error_text)
+                usage = replace(usage, consecutive_failures=usage.consecutive_failures + 1)
+                emit(
+                    EventKind.STEP_FAILED,
+                    {
+                        "error": error_text,
+                        "consecutive_failures": usage.consecutive_failures,
+                    },
+                )
+                if usage.consecutive_failures >= task.budget.max_consecutive_failures:
+                    return finish(
+                        RunState.FAILED,
+                        error=f"consecutive-failure budget exhausted: {error_text}",
+                    )
 
     @staticmethod
     def _handoff_for(

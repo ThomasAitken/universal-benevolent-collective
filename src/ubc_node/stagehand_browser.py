@@ -27,18 +27,18 @@ from ubc_node.browser_contracts import (
     TabInfo,
     origin_for_url,
 )
-from ubc_node.contracts import ActionKind, ActionProposal, HumanHandoff, JsonValue
+from ubc_node.contracts import ActionKind, ActionProposal, FatalRunError, HumanHandoff, JsonValue
 
 
 class BrowserSessionError(RuntimeError):
     """Base error for browser session failures."""
 
 
-class BrowserSessionInactiveError(BrowserSessionError):
+class BrowserSessionInactiveError(BrowserSessionError, FatalRunError):
     """Raised when an operation is attempted outside the active state."""
 
 
-class NavigationPolicyError(BrowserSessionError):
+class NavigationPolicyError(BrowserSessionError, FatalRunError):
     """Raised after an unapproved navigation causes session revocation."""
 
 
@@ -433,6 +433,25 @@ class StagehandBrowserAdapter:
         except Exception:
             await self.revoke()
             raise
+
+    async def observe_state(self) -> Mapping[str, JsonValue]:
+        """Return a safe, bounded snapshot of current tabs and active page state."""
+        if self._state is not BrowserSessionState.ACTIVE:
+            return {
+                "session_state": self._state.value,
+                "tabs": [],
+                "active_page": None,
+            }
+        tabs = await self.list_tabs()
+        active_tab = next((tab for tab in tabs if tab.active), None)
+        active_page: JsonValue = None
+        if active_tab is not None and active_tab.url != "about:blank":
+            active_page = self._inspection_record(await self.inspect())
+        return {
+            "session_state": self._state.value,
+            "tabs": [self._tab_record(tab) for tab in tabs],
+            "active_page": active_page,
+        }
 
     async def execute(self, proposal: ActionProposal) -> Mapping[str, JsonValue]:
         """Bridge Phase 0 browser proposals into the typed Phase 1 operations."""
