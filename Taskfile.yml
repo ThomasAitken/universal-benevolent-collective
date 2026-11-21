@@ -1,0 +1,53 @@
+version: "3"
+
+tasks:
+  default:
+    desc: List available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  bootstrap:
+    desc: Create the development environment
+    cmds:
+      - uv sync --all-groups
+
+  sync:
+    desc: Synchronize the environment from the lockfile
+    cmds:
+      - uv sync --locked --all-groups
+
+  format:
+    desc: Format Python and apply safe lint fixes
+    cmds:
+      - uv run ruff format .
+      - uv run ruff check --fix .
+
+  lint:
+    desc: Check Python formatting and lint rules
+    cmds:
+      - uv run ruff format --check .
+      - uv run ruff check .
+
+  typecheck:
+    desc: Run strict static type checking
+    cmds:
+      - uv run pyright
+
+  test:
+    desc: Run the test suite with coverage
+    cmds:
+      - uv run pytest
+
+  build:
+    desc: Build the source distribution and wheel
+    cmds:
+      - uv build
+
+  check:
+    desc: Run all validation and build checks
+    cmds:
+      - task: lint
+      - task: typecheck
+      - task: test
+      - task: build

@@ -1,0 +1,92 @@
+[project]
+name = "ubc-node"
+version = "0.1.0"
+description = "A constitution-governed runtime for human-supervised AI agents"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "AGPL-3.0-or-later"
+authors = [
+    { name = "Tom Aitken" },
+]
+dependencies = []
+
+[project.scripts]
+ubc = "ubc_node.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ThomasAitken/universal-benevolent-collective-public"
+Repository = "https://github.com/ThomasAitken/universal-benevolent-collective-public"
+Issues = "https://github.com/ThomasAitken/universal-benevolent-collective-public/issues"
+
+[build-system]
+requires = ["uv_build>=0.9.28,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.408,<2",
+    "pytest>=9,<10",
+    "pytest-asyncio>=1.3,<2",
+    "pytest-cov>=7,<8",
+    "ruff>=0.14,<0.15",
+]
+
+[tool.uv]
+required-version = ">=0.9.28,<0.10.0"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "ASYNC",
+    "B",
+    "E4",
+    "E7",
+    "E9",
+    "F",
+    "I",
+    "RUF",
+    "UP",
+]
+
+[tool.ruff.format]
+docstring-code-format = true
+line-ending = "lf"
+quote-style = "double"
+
+[tool.pyright]
+include = ["src", "tests"]
+exclude = [".venv"]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+addopts = [
+    "--strict-config",
+    "--strict-markers",
+    "--cov=ubc_node",
+    "--cov-branch",
+    "--cov-report=term-missing",
+    "--cov-fail-under=100",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["ubc_node"]
+omit = ["src/ubc_node/__main__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]

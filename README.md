@@ -32,3 +32,24 @@ will identify the constitution version and digest to which they are bound.
 
 Contributions are governed by the [contribution policy](CONTRIBUTING.md), with
 separate handling for proposals to amend the constitution.
+
+## Development
+
+The initial node runtime uses Python 3.13 and
+[uv](https://docs.astral.sh/uv/) for Python installation, dependency locking,
+virtual environments, and package commands. Development commands are defined
+with [Task](https://taskfile.dev/).
+
+```shell
+task bootstrap
+uv run ubc doctor
+```
+
+`task bootstrap` creates the development environment. The recommended VS Code
+extensions are listed in `.vscode/extensions.json`; Ruff formats, applies safe
+lint fixes, and organizes imports whenever a Python file is saved. Pyright
+provides strict type diagnostics in the editor.
+
+CI runs formatting and lint checks, strict type checking, the test suite with
+branch coverage, and a package build. Run `task check` to reproduce those checks
+locally when needed.
