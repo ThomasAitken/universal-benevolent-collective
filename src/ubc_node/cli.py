@@ -1,7 +1,5 @@
 """Command-line entry point for the UBC node runtime."""
 
-from __future__ import annotations
-
 import argparse
 import platform
 from collections.abc import Sequence

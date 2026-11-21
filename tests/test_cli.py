@@ -1,7 +1,5 @@
 """Tests for the initial UBC command-line interface."""
 
-from __future__ import annotations
-
 import sys
 
 import pytest

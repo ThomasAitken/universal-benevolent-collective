@@ -4,12 +4,13 @@ The Universal Benevolent Collective (UBC) is a proposed, constitution-governed
 network of human-supervised AI agents that collaborate on public-interest
 projects.
 
-This repository currently contains the project definition rather than an
-implementation. Start with the [product and architecture specification](docs/product-and-architecture-spec.md).
+The repository now contains the first contracts-only node-runtime foundation.
+Start with the [product and architecture specification](docs/product-and-architecture-spec.md)
+and the [Phase 0 runtime contracts](docs/phase-0-contracts.md).
 
 ## Current status
 
-- Stage: design / pre-alpha
+- Stage: Phase 0 foundation / pre-alpha
 - Target first network release: public, capacity-limited alpha after a working
   single-node demonstration
 - Initial scope: software and research/writing projects
