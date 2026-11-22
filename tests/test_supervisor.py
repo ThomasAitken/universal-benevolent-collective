@@ -557,3 +557,68 @@ async def test_browser_state_observer_and_duration_budgets_are_enforced() -> Non
     assert res_dur_ho.state is RunState.FAILED
     assert res_dur_ho.error == "duration budget exhausted"
     assert res_dur_ho.usage.handoffs == 1
+
+
+@pytest.mark.asyncio
+async def test_task_aware_takeover_decline_and_resume_policy_recheck() -> None:
+    class TaskAwareBrowser(FakeBrowserRuntime):
+        def __init__(self, result: Mapping[str, JsonValue]) -> None:
+            super().__init__()
+            self._result = result
+            self.seen_tasks: list[TaskSpec] = []
+
+        async def handoff_for_task(
+            self,
+            task: TaskSpec,
+            request: HumanHandoff,
+        ) -> Mapping[str, JsonValue]:
+            self.seen_tasks.append(task)
+            self.handoffs.append(request)
+            return dict(self._result)
+
+    # Human explicitly declines takeover -> CANCELLED
+    declining_browser = TaskAwareBrowser(
+        {
+            "authentication_completed": False,
+            "control_returned": False,
+            "origin": "https://example.test",
+            "transient_state_cleared": True,
+        }
+    )
+    supervisor, _, sink, _ = _supervisor(
+        [ActionProposal.request_handoff("Authenticate", HANDOFF)],
+        browser=declining_browser,
+    )
+    result = await supervisor.run(_task())
+    assert result.state is RunState.CANCELLED
+    assert result.error == "human declined takeover control"
+    assert len(declining_browser.seen_tasks) == 1
+    assert sink.events[-2].payload == {"from": "awaiting_human", "to": "cancelled"}
+
+    # Human returns control, but resume policy recheck denies -> FAILED
+    returning_browser = TaskAwareBrowser(
+        {
+            "authentication_completed": True,
+            "control_returned": True,
+            "origin": "https://example.test",
+            "transient_state_cleared": True,
+        }
+    )
+    policy = ScriptedPolicyEvaluator(
+        [
+            PolicyDecision(PolicyOutcome.ALLOW, "allow handoff"),
+            PolicyDecision(PolicyOutcome.DENY, "post-handoff policy revoked"),
+        ]
+    )
+    supervisor2, _, _, _ = _supervisor(
+        [ActionProposal.request_handoff("Authenticate", HANDOFF)],
+        browser=returning_browser,
+        policy=policy,
+    )
+    result2 = await supervisor2.run(_task())
+    assert result2.state is RunState.FAILED
+    assert result2.error == "policy denied resume after handoff: post-handoff policy revoked"
+    assert policy.proposals[-1].parameters == {
+        "operation": "resume_after_handoff",
+        "origin": "https://example.test",
+    }

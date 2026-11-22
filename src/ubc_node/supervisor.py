@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from ubc_node.contracts import (
     ActionKind,
+    ActionProposal,
     AgentBackend,
     BrowserRuntime,
     BrowserStateObserver,
@@ -22,6 +23,7 @@ from ubc_node.contracts import (
     RunEvent,
     RunResult,
     RunState,
+    TaskAwareHandoffRuntime,
     TaskSpec,
 )
 from ubc_node.state_machine import RunStateMachine
@@ -220,13 +222,44 @@ class RunSupervisor:
                             "instructions": handoff.instructions,
                         },
                     )
-                    observation = await self._browser.handoff(handoff)
+                    browser = self._browser
+                    if isinstance(browser, TaskAwareHandoffRuntime):
+                        observation = await browser.handoff_for_task(task, handoff)
+                    else:
+                        observation = await self._browser.handoff(handoff)
                     usage = replace(usage, consecutive_failures=0)
                     emit(EventKind.HANDOFF_COMPLETED, {"observation": dict(observation)})
+                    if observation.get("control_returned") is False:
+                        return finish(RunState.CANCELLED, error="human declined takeover control")
                     if token.cancelled:
                         return finish(RunState.CANCELLED, error="cancellation requested")
                     if elapsed_seconds() >= task.budget.max_duration_seconds:
                         return finish(RunState.FAILED, error="duration budget exhausted")
+                    resume_origin = observation.get("origin")
+                    resolved_origin = (
+                        resume_origin
+                        if isinstance(resume_origin, str) and resume_origin.strip()
+                        else handoff.origin
+                    )
+                    resume_decision = await self._policy.evaluate(
+                        task,
+                        ActionProposal.browser(
+                            "Resume after human takeover",
+                            {"operation": "resume_after_handoff", "origin": resolved_origin},
+                        ),
+                    )
+                    emit(
+                        EventKind.POLICY_DECIDED,
+                        {
+                            "outcome": resume_decision.outcome.value,
+                            "reason": resume_decision.reason,
+                        },
+                    )
+                    if resume_decision.outcome is not PolicyOutcome.ALLOW:
+                        return finish(
+                            RunState.FAILED,
+                            error=f"policy denied resume after handoff: {resume_decision.reason}",
+                        )
                     transition(RunState.RUNNING)
                     continue
 

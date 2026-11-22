@@ -356,6 +356,19 @@ class BrowserStateObserver(Protocol):
         ...
 
 
+@runtime_checkable
+class TaskAwareHandoffRuntime(Protocol):
+    """Optional handoff capability that receives the requesting task context."""
+
+    async def handoff_for_task(
+        self,
+        task: TaskSpec,
+        request: HumanHandoff,
+    ) -> Mapping[str, JsonValue]:
+        """Yield control to a human with task context and return redacted status."""
+        ...
+
+
 class PolicyEvaluator(Protocol):
     """Deterministic policy boundary invoked before every action."""
 

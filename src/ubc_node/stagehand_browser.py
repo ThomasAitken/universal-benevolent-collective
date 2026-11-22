@@ -9,7 +9,7 @@ from time import monotonic
 from typing import Protocol, cast
 from uuid import uuid4
 
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, ConfigDict, create_model
 
 from ubc_node.browser_contracts import (
     ArtifactRef,
@@ -27,7 +27,22 @@ from ubc_node.browser_contracts import (
     TabInfo,
     origin_for_url,
 )
-from ubc_node.contracts import ActionKind, ActionProposal, FatalRunError, HumanHandoff, JsonValue
+from ubc_node.contracts import (
+    ActionKind,
+    ActionProposal,
+    FatalRunError,
+    HumanHandoff,
+    JsonValue,
+    TaskSpec,
+)
+from ubc_node.takeover import (
+    ClipboardClearer,
+    TakeoverDecision,
+    TakeoverHandler,
+    TakeoverOutcome,
+    TakeoverPromptContext,
+    clear_system_clipboard,
+)
 
 
 class BrowserSessionError(RuntimeError):
@@ -135,6 +150,17 @@ class _StagehandLike(Protocol):
 
 type HandoffHandler = Callable[[HumanHandoff], Awaitable[None]]
 
+_CLEAR_TRANSIENT_FORMS_SCRIPT = """() => {
+  const fields = document.querySelectorAll(
+    'input[type="password"], input[type="text"], input[type="email"], ' +
+    'input[type="tel"], input[type="search"], input[type="number"], ' +
+    'input:not([type]), textarea'
+  );
+  for (const field of fields) {
+    field.value = '';
+  }
+}"""
+
 
 @dataclass(frozen=True, slots=True)
 class _CandidateTarget:
@@ -153,11 +179,15 @@ class StagehandBrowserAdapter:
         browser: _BrowserLike,
         stagehand: _StagehandLike,
         handoff_handler: HandoffHandler | None = None,
+        takeover_handler: TakeoverHandler | None = None,
+        clipboard_clearer: ClipboardClearer | None = None,
     ) -> None:
         self._config = config
         self._browser = browser
         self._stagehand = stagehand
         self._handoff_handler = handoff_handler
+        self._takeover_handler = takeover_handler
+        self._clipboard_clearer = clipboard_clearer or clear_system_clipboard
         self._state = BrowserSessionState.ACTIVE
         self._tab_tokens: dict[str, str] = {}
         self._pages: dict[str, _PageLike] = {}
@@ -176,6 +206,8 @@ class StagehandBrowserAdapter:
         model_api_key: str | None = None,
         chrome_path: Path | None = None,
         handoff_handler: HandoffHandler | None = None,
+        takeover_handler: TakeoverHandler | None = None,
+        clipboard_clearer: ClipboardClearer | None = None,
     ) -> "StagehandBrowserAdapter":  # pragma: no cover - exercised by opt-in browser test
         """Launch the pinned Stagehand local browser with a policy-bound profile."""
         from stagehand import Stagehand, local_browser
@@ -206,6 +238,8 @@ class StagehandBrowserAdapter:
             browser=cast(_BrowserLike, browser),
             stagehand=cast(_StagehandLike, stagehand),
             handoff_handler=handoff_handler,
+            takeover_handler=takeover_handler,
+            clipboard_clearer=clipboard_clearer,
         )
 
     @property
@@ -419,20 +453,85 @@ class StagehandBrowserAdapter:
         await self._shutdown()
 
     async def handoff(self, request: HumanHandoff) -> Mapping[str, JsonValue]:
-        """Pause automation while a configured human handler controls the visible browser."""
+        """Pause automation during human takeover and return only a redacted record."""
+        return await self._run_takeover(request, task=None)
+
+    async def handoff_for_task(
+        self,
+        task: TaskSpec,
+        request: HumanHandoff,
+    ) -> Mapping[str, JsonValue]:
+        """Pause automation with task context and return only a redacted record."""
+        return await self._run_takeover(request, task=task)
+
+    async def _run_takeover(
+        self,
+        request: HumanHandoff,
+        *,
+        task: TaskSpec | None,
+    ) -> Mapping[str, JsonValue]:
         self._require_active()
-        if self._handoff_handler is None:
+        if self._takeover_handler is None and self._handoff_handler is None:
             raise BrowserSessionError("no human handoff handler is configured")
+        if self._takeover_handler is not None and self._config.headless:
+            raise BrowserSessionError(
+                "human takeover requires a visible browser window (headless=False)"
+            )
         await self.pause()
         try:
-            await self._handoff_handler(request)
+            if self._takeover_handler is not None:
+                context = TakeoverPromptContext(
+                    origin=request.origin,
+                    reason=request.reason,
+                    instructions=request.instructions,
+                    task_id=task.task_id if task is not None else None,
+                    task_objective=task.objective if task is not None else None,
+                )
+                decision = await self._takeover_handler(context)
+            else:
+                assert self._handoff_handler is not None
+                await self._handoff_handler(request)
+                decision = TakeoverDecision(
+                    outcome=TakeoverOutcome.RETURNED,
+                    authentication_completed=True,
+                )
+
+            cleared = await self._clear_transient_state()
+            if decision.outcome is TakeoverOutcome.DECLINED:
+                await self.revoke()
+                return {
+                    "authentication_completed": False,
+                    "control_returned": False,
+                    "origin": request.origin,
+                    "transient_state_cleared": cleared,
+                }
+
             if self._state is BrowserSessionState.PAUSED:
                 await self.resume()
-            inspection = await self.inspect()
-            return self._inspection_record(inspection)
+            self._require_active()
+            page = await self._active_page()
+            await self._enforce_page_origin(page)
+            active_origin = origin_for_url(await page.url())
+            return {
+                "authentication_completed": decision.authentication_completed,
+                "control_returned": True,
+                "origin": active_origin,
+                "transient_state_cleared": cleared,
+            }
         except Exception:
             await self.revoke()
             raise
+
+    async def _clear_transient_state(self) -> bool:
+        clipboard_cleared = await self._clipboard_clearer()
+        pages = await self._browser.context.pages()
+        for page in pages:
+            evaluate = getattr(page, "evaluate", None)
+            if callable(evaluate):
+                await cast(Callable[[str], Awaitable[object]], evaluate)(
+                    _CLEAR_TRANSIENT_FORMS_SCRIPT
+                )
+        return clipboard_cleared
 
     async def observe_state(self) -> Mapping[str, JsonValue]:
         """Return a safe, bounded snapshot of current tabs and active page state."""
@@ -643,13 +742,17 @@ class StagehandBrowserAdapter:
         for field in schema.fields:
             python_type = type_map[field.type]
             definitions[field.name] = (
-                (python_type, ...) if field.required else (python_type | None, None)
+                (python_type, ...) if field.required else (python_type | None, ...)
             )
         # Pydantic intentionally accepts runtime field definitions that cannot
         # be represented precisely by a static type checker.
         return cast(
             type[BaseModel],
-            create_model("UBCBrowserExtraction", **definitions),  # pyright: ignore[reportCallIssue, reportArgumentType]
+            create_model(
+                "UBCBrowserExtraction",
+                __config__=ConfigDict(extra="forbid"),
+                **definitions,  # pyright: ignore[reportCallIssue, reportArgumentType]
+            ),
         )
 
     @staticmethod

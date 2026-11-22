@@ -23,7 +23,7 @@ from ubc_node.browser_contracts import (
     ExtractionType,
     InteractionKind,
 )
-from ubc_node.contracts import ActionProposal, HumanHandoff, JsonValue
+from ubc_node.contracts import ActionProposal, HumanHandoff, JsonValue, TaskSpec
 from ubc_node.stagehand_browser import (
     BrowserSessionError,
     BrowserSessionInactiveError,
@@ -34,6 +34,13 @@ from ubc_node.stagehand_browser import (
     UnknownTabError,
     _BrowserLike,  # pyright: ignore[reportPrivateUsage]
     _StagehandLike,  # pyright: ignore[reportPrivateUsage]
+)
+from ubc_node.takeover import (
+    ClipboardClearer,
+    TakeoverDecision,
+    TakeoverHandler,
+    TakeoverOutcome,
+    TakeoverPromptContext,
 )
 
 ORIGIN = "https://fixture.test"
@@ -48,6 +55,8 @@ def _adapter(
     stagehand: FakeStagehand | None = None,
     context: FakeContext | None = None,
     handoff_handler: Callable[[HumanHandoff], Awaitable[None]] | None = None,
+    takeover_handler: TakeoverHandler | None = None,
+    clipboard_clearer: ClipboardClearer | None = None,
 ) -> tuple[StagehandBrowserAdapter, FakePage, FakeContext, FakeBrowser, FakeStagehand]:
     fake_page = page or FakePage("page-1", f"{ORIGIN}/")
     fake_context = context or FakeContext([fake_page])
@@ -60,11 +69,17 @@ def _adapter(
         max_fill_chars=10,
         max_download_bytes=20,
     )
+
+    async def noop_clipboard() -> bool:
+        return True
+
     adapter = StagehandBrowserAdapter(
         config=session_config,
         browser=cast(_BrowserLike, browser),
         stagehand=cast(_StagehandLike, fake_stagehand),
         handoff_handler=handoff_handler,
+        takeover_handler=takeover_handler,
+        clipboard_clearer=clipboard_clearer or noop_clipboard,
     )
     return adapter, fake_page, fake_context, browser, fake_stagehand
 
@@ -230,7 +245,11 @@ async def test_extract_builds_and_validates_constrained_schema(tmp_path: Path) -
 
     result = await adapter.extract("Extract the fixture fields", schema)
     assert result.data == stagehand.extract_values
-    assert set(stagehand.extract_calls[0][1].model_fields) == set(stagehand.extract_values)
+    model_type = stagehand.extract_calls[0][1]
+    assert set(model_type.model_fields) == set(stagehand.extract_values)
+    json_schema = model_type.model_json_schema()
+    assert json_schema["additionalProperties"] is False
+    assert set(json_schema["required"]) == set(stagehand.extract_values)
 
     with pytest.raises(BrowserContractError, match="instruction"):
         await adapter.extract(" ", schema)
@@ -397,16 +416,23 @@ async def test_shutdown_skips_browser_already_closed(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_handoff_pauses_resumes_and_revokes_on_failure(tmp_path: Path) -> None:
+async def test_handoff_pauses_resumes_redacts_and_revokes_on_failure(tmp_path: Path) -> None:
     handled: list[HumanHandoff] = []
 
     async def handler(request: HumanHandoff) -> None:
         handled.append(request)
 
-    adapter, _, _, _, _ = _adapter(tmp_path, handoff_handler=handler)
+    page = FakePage("page-1", f"{ORIGIN}/verification?code=123456", content="secret code 123456")
+    adapter, _, _, _, _ = _adapter(tmp_path, page=page, handoff_handler=handler)
     result = await adapter.handoff(HANDOFF)
     assert handled == [HANDOFF]
-    assert result["untrusted"] is True
+    assert result == {
+        "authentication_completed": True,
+        "control_returned": True,
+        "origin": ORIGIN,
+        "transient_state_cleared": True,
+    }
+    assert "123456" not in str(result)
     assert adapter.state is BrowserSessionState.ACTIVE
 
     adapter_without_handler, _, _, _, _ = _adapter(tmp_path / "no-handler")
@@ -431,6 +457,95 @@ async def test_handoff_pauses_resumes_and_revokes_on_failure(tmp_path: Path) -> 
     with pytest.raises(BrowserSessionInactiveError, match="revoked"):
         await revoking.handoff(HANDOFF)
     assert revoking.state is BrowserSessionState.REVOKED
+
+
+@pytest.mark.asyncio
+async def test_takeover_requires_visible_window_clears_state_and_handles_decline(
+    tmp_path: Path,
+) -> None:
+    class EvaluatableFakePage(FakePage):
+        def __init__(self, page_id: str, url: str) -> None:
+            super().__init__(page_id, url)
+            self.scripts: list[str] = []
+
+        async def evaluate(self, script: str) -> None:
+            self.scripts.append(script)
+
+    contexts: list[TakeoverPromptContext] = []
+
+    async def accept_takeover(context: TakeoverPromptContext) -> TakeoverDecision:
+        contexts.append(context)
+        return TakeoverDecision(TakeoverOutcome.RETURNED, authentication_completed=True)
+
+    # Headless browser rejects takeover_handler
+    headless_adapter, _, _, _, _ = _adapter(tmp_path / "headless", takeover_handler=accept_takeover)
+    with pytest.raises(BrowserSessionError, match="visible browser window"):
+        await headless_adapter.handoff_for_task(TaskSpec("t-1", "Verify"), HANDOFF)
+
+    # Visible browser accepts takeover_handler, clears clipboard + forms, returns redacted result
+    visible_config = BrowserSessionConfig(
+        workspace=tmp_path / "visible",
+        allowed_origins=frozenset({ORIGIN}),
+        headless=False,
+    )
+    eval_page = EvaluatableFakePage("page-1", f"{ORIGIN}/verification?code=123456")
+    clipboard_calls = 0
+
+    async def clear_clipboard() -> bool:
+        nonlocal clipboard_calls
+        clipboard_calls += 1
+        return True
+
+    visible_adapter, _, _, _, _ = _adapter(
+        tmp_path / "visible",
+        page=eval_page,
+        config=visible_config,
+        takeover_handler=accept_takeover,
+        clipboard_clearer=clear_clipboard,
+    )
+    task = TaskSpec("task-9", "Complete verification")
+    result = await visible_adapter.handoff_for_task(task, HANDOFF)
+    assert contexts == [
+        TakeoverPromptContext(
+            origin=ORIGIN,
+            reason=HANDOFF.reason,
+            instructions=HANDOFF.instructions,
+            task_id="task-9",
+            task_objective="Complete verification",
+        )
+    ]
+    assert clipboard_calls == 1
+    assert len(eval_page.scripts) == 1
+    assert result == {
+        "authentication_completed": True,
+        "control_returned": True,
+        "origin": ORIGIN,
+        "transient_state_cleared": True,
+    }
+    assert visible_adapter.state is BrowserSessionState.ACTIVE
+
+    # Declined takeover clears state, revokes session, and returns control_returned=False
+    async def decline_takeover(_: TakeoverPromptContext) -> TakeoverDecision:
+        return TakeoverDecision(TakeoverOutcome.DECLINED, authentication_completed=False)
+
+    decline_config = BrowserSessionConfig(
+        workspace=tmp_path / "decline",
+        allowed_origins=frozenset({ORIGIN}),
+        headless=False,
+    )
+    decline_adapter, _, _, _, _ = _adapter(
+        tmp_path / "decline",
+        config=decline_config,
+        takeover_handler=decline_takeover,
+    )
+    declined = await decline_adapter.handoff_for_task(task, HANDOFF)
+    assert declined == {
+        "authentication_completed": False,
+        "control_returned": False,
+        "origin": ORIGIN,
+        "transient_state_cleared": True,
+    }
+    assert decline_adapter.state is BrowserSessionState.REVOKED
 
 
 def _proposal(operation: str, **parameters: JsonValue) -> ActionProposal:
