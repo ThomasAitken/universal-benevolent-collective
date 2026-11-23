@@ -6,9 +6,11 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from ubc_node.contracts import (
+    ActionApprover,
     ActionKind,
     ActionProposal,
     AgentBackend,
+    ApprovalOutcome,
     BrowserRuntime,
     BrowserStateObserver,
     BudgetUsage,
@@ -26,6 +28,7 @@ from ubc_node.contracts import (
     TaskAwareHandoffRuntime,
     TaskSpec,
 )
+from ubc_node.policy import audit_safe_parameters
 from ubc_node.state_machine import RunStateMachine
 
 
@@ -55,6 +58,7 @@ class RunSupervisor:
         browser: BrowserRuntime,
         policy: PolicyEvaluator,
         event_sink: EventSink,
+        approver: ActionApprover | None = None,
         clock: Callable[[], datetime] | None = None,
         run_id_factory: Callable[[], str] | None = None,
     ) -> None:
@@ -62,6 +66,7 @@ class RunSupervisor:
         self._browser = browser
         self._policy = policy
         self._event_sink = event_sink
+        self._approver = approver
         self._clock = clock or (lambda: datetime.now(UTC))
         self._run_id_factory = run_id_factory or (lambda: str(uuid4()))
 
@@ -159,6 +164,7 @@ class RunSupervisor:
                 return finish(RunState.FAILED, error="cost budget exhausted")
 
             usage = replace(usage, steps=usage.steps + 1)
+            action_id: str | None = None
             try:
                 if isinstance(self._browser, BrowserStateObserver):
                     browser_state = await self._browser.observe_state()
@@ -173,10 +179,12 @@ class RunSupervisor:
 
                 usage = replace(usage, model_calls=usage.model_calls + 1)
                 proposal = await self._agent.propose(task, tuple(history))
+                action_id = f"{run_id}:action:{usage.model_calls}"
                 proposal_payload: dict[str, JsonValue] = {
+                    "action_id": action_id,
                     "kind": proposal.kind.value,
                     "description": proposal.description,
-                    "parameters": dict(proposal.parameters),
+                    "parameters": audit_safe_parameters(proposal.parameters),
                 }
                 if proposal.usage is not None:
                     usage = replace(
@@ -201,12 +209,95 @@ class RunSupervisor:
                     return finish(RunState.FAILED, error="cost budget exhausted")
 
                 decision = await self._policy.evaluate(task, proposal)
-                emit(
-                    EventKind.POLICY_DECIDED,
-                    {"outcome": decision.outcome.value, "reason": decision.reason},
-                )
+                decision_payload: dict[str, JsonValue] = {
+                    "action_id": action_id,
+                    "outcome": decision.outcome.value,
+                    "reason": decision.reason,
+                }
+                if decision.risk is not None:
+                    decision_payload["risk"] = decision.risk.value
+                if decision.rule_id is not None:
+                    decision_payload["rule_id"] = decision.rule_id
+                if decision.capability is not None:
+                    decision_payload["capability"] = decision.capability.value
+                if decision.control is not None:
+                    decision_payload["control"] = decision.control.value
+                emit(EventKind.POLICY_DECIDED, decision_payload)
+                if token.cancelled:
+                    return finish(RunState.CANCELLED, error="cancellation requested")
                 if decision.outcome is PolicyOutcome.DENY:
                     return finish(RunState.FAILED, error=f"policy denied action: {decision.reason}")
+                if decision.outcome is PolicyOutcome.REQUIRE_APPROVAL:
+                    assert decision.risk is not None
+                    emit(
+                        EventKind.APPROVAL_REQUESTED,
+                        {
+                            "action_id": action_id,
+                            "risk": decision.risk.value,
+                            "rule_id": decision.rule_id,
+                            "capability": (
+                                decision.capability.value
+                                if decision.capability is not None
+                                else None
+                            ),
+                            "control": (
+                                decision.control.value if decision.control is not None else None
+                            ),
+                            "description": proposal.description,
+                            "parameters": audit_safe_parameters(proposal.parameters),
+                        },
+                    )
+                    if self._approver is None:
+                        approval_reason = "no human approver is configured"
+                        emit(
+                            EventKind.APPROVAL_DECIDED,
+                            {
+                                "action_id": action_id,
+                                "outcome": ApprovalOutcome.DENY.value,
+                                "reason": approval_reason,
+                            },
+                        )
+                        return finish(
+                            RunState.FAILED,
+                            error=f"human approval denied action: {approval_reason}",
+                        )
+                    try:
+                        approval = await self._approver.approve(
+                            action_id,
+                            task,
+                            proposal,
+                            decision,
+                        )
+                    except Exception as error:
+                        emit(
+                            EventKind.APPROVAL_DECIDED,
+                            {
+                                "action_id": action_id,
+                                "outcome": "error",
+                                "reason": f"approval handler failed: {type(error).__name__}",
+                            },
+                        )
+                        return finish(
+                            RunState.FAILED,
+                            error=f"approval failed: {type(error).__name__}: {error}",
+                        )
+                    emit(
+                        EventKind.APPROVAL_DECIDED,
+                        {
+                            "action_id": action_id,
+                            "outcome": approval.outcome.value,
+                            "reason": approval.reason,
+                        },
+                    )
+                    if token.cancelled:
+                        return finish(RunState.CANCELLED, error="cancellation requested")
+                    if elapsed_seconds() >= task.budget.max_duration_seconds:
+                        return finish(RunState.FAILED, error="duration budget exhausted")
+                    if approval.outcome is ApprovalOutcome.DENY:
+                        return finish(
+                            RunState.FAILED,
+                            error=f"human approval denied action: {approval.reason}",
+                        )
 
                 handoff = self._handoff_for(proposal.kind, proposal.handoff, decision)
                 if handoff is not None:
@@ -217,6 +308,7 @@ class RunSupervisor:
                     emit(
                         EventKind.HANDOFF_REQUESTED,
                         {
+                            "action_id": action_id,
                             "reason": handoff.reason,
                             "origin": handoff.origin,
                             "instructions": handoff.instructions,
@@ -228,7 +320,10 @@ class RunSupervisor:
                     else:
                         observation = await self._browser.handoff(handoff)
                     usage = replace(usage, consecutive_failures=0)
-                    emit(EventKind.HANDOFF_COMPLETED, {"observation": dict(observation)})
+                    emit(
+                        EventKind.HANDOFF_COMPLETED,
+                        {"action_id": action_id, "observation": dict(observation)},
+                    )
                     if observation.get("control_returned") is False:
                         return finish(RunState.CANCELLED, error="human declined takeover control")
                     if token.cancelled:
@@ -251,8 +346,10 @@ class RunSupervisor:
                     emit(
                         EventKind.POLICY_DECIDED,
                         {
+                            "action_id": action_id,
                             "outcome": resume_decision.outcome.value,
                             "reason": resume_decision.reason,
+                            "check": "resume_after_handoff",
                         },
                     )
                     if resume_decision.outcome is not PolicyOutcome.ALLOW:
@@ -277,11 +374,23 @@ class RunSupervisor:
                     browser_actions=usage.browser_actions + 1,
                     downloads=usage.downloads + (1 if is_download else 0),
                 )
+                emit(
+                    EventKind.BROWSER_ACTION_STARTED,
+                    {
+                        "action_id": action_id,
+                        "operation": proposal.parameters.get("operation"),
+                        "parameters": audit_safe_parameters(proposal.parameters),
+                    },
+                )
                 observation = await self._browser.execute(proposal)
                 usage = replace(usage, consecutive_failures=0)
                 emit(
                     EventKind.BROWSER_ACTION_COMPLETED,
-                    {"observation": dict(observation)},
+                    {
+                        "action_id": action_id,
+                        "operation": proposal.parameters.get("operation"),
+                        "observation": dict(observation),
+                    },
                 )
             except FatalRunError as error:
                 return finish(
@@ -295,10 +404,13 @@ class RunSupervisor:
                 usage = replace(usage, consecutive_failures=usage.consecutive_failures + 1)
                 emit(
                     EventKind.STEP_FAILED,
-                    {
-                        "error": error_text,
-                        "consecutive_failures": usage.consecutive_failures,
-                    },
+                    (
+                        {
+                            "error": error_text,
+                            "consecutive_failures": usage.consecutive_failures,
+                        }
+                        | ({"action_id": action_id} if action_id is not None else {})
+                    ),
                 )
                 if usage.consecutive_failures >= task.budget.max_consecutive_failures:
                     return finish(

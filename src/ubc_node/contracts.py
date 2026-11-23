@@ -58,6 +58,46 @@ class PolicyOutcome(StrEnum):
     ALLOW = "allow"
     DENY = "deny"
     REQUIRE_HUMAN = "require_human"
+    REQUIRE_APPROVAL = "require_approval"
+
+
+class ActionRisk(StrEnum):
+    """Prototype action classes enforced outside the model."""
+
+    R0 = "R0"
+    R1 = "R1"
+    R2 = "R2"
+
+
+class ActionCapability(StrEnum):
+    """Semantic authority requested by an action, independent of browser mechanics."""
+
+    READ = "read"
+    NAVIGATE = "navigate"
+    CAPTURE = "capture"
+    EDIT_DRAFT = "edit_draft"
+    MANAGE_TABS = "manage_tabs"
+    DOWNLOAD = "download"
+    REVERSIBLE_INTERACTION = "reversible_interaction"
+    SUBMIT_FORM = "submit_form"
+    SEND_MESSAGE = "send_message"
+    CHANGE_ACCOUNT = "change_account"
+    UPLOAD = "upload"
+
+
+class ActionControl(StrEnum):
+    """Control applied to a granted semantic capability."""
+
+    AUTOMATIC = "automatic"
+    REQUIRE_APPROVAL = "require_approval"
+    DENY = "deny"
+
+
+class ApprovalOutcome(StrEnum):
+    """A person's decision about one exact consequential proposal."""
+
+    APPROVE = "approve"
+    DENY = "deny"
 
 
 class EventKind(StrEnum):
@@ -68,6 +108,9 @@ class EventKind(StrEnum):
     BROWSER_STATE_OBSERVED = "browser_state_observed"
     ACTION_PROPOSED = "action_proposed"
     POLICY_DECIDED = "policy_decided"
+    APPROVAL_REQUESTED = "approval_requested"
+    APPROVAL_DECIDED = "approval_decided"
+    BROWSER_ACTION_STARTED = "browser_action_started"
     BROWSER_ACTION_COMPLETED = "browser_action_completed"
     STEP_FAILED = "step_failed"
     HANDOFF_REQUESTED = "handoff_requested"
@@ -227,6 +270,10 @@ class PolicyDecision:
     outcome: PolicyOutcome
     reason: str
     handoff: HumanHandoff | None = None
+    risk: ActionRisk | None = None
+    rule_id: str | None = None
+    capability: ActionCapability | None = None
+    control: ActionControl | None = None
 
     def __post_init__(self) -> None:
         _require_text(self.reason, "reason")
@@ -234,6 +281,21 @@ class PolicyDecision:
             raise ValueError("require_human decisions need handoff details")
         if self.outcome is not PolicyOutcome.REQUIRE_HUMAN and self.handoff is not None:
             raise ValueError("handoff details are only valid when a human is required")
+        if self.outcome is PolicyOutcome.REQUIRE_APPROVAL and self.risk is None:
+            raise ValueError("require_approval decisions must classify the action risk")
+        if self.rule_id is not None:
+            _require_text(self.rule_id, "rule_id")
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalDecision:
+    """Human authorization result for one proposal; it carries no reusable grant."""
+
+    outcome: ApprovalOutcome
+    reason: str
+
+    def __post_init__(self) -> None:
+        _require_text(self.reason, "reason")
 
 
 @dataclass(frozen=True, slots=True)
@@ -374,6 +436,20 @@ class PolicyEvaluator(Protocol):
 
     async def evaluate(self, task: TaskSpec, proposal: ActionProposal) -> PolicyDecision:
         """Authorize, deny, or require a human for the proposal."""
+        ...
+
+
+class ActionApprover(Protocol):
+    """Human approval boundary for a single policy-classified proposal."""
+
+    async def approve(
+        self,
+        action_id: str,
+        task: TaskSpec,
+        proposal: ActionProposal,
+        policy_decision: PolicyDecision,
+    ) -> ApprovalDecision:
+        """Approve or deny the exact proposal identified by ``action_id``."""
         ...
 
 

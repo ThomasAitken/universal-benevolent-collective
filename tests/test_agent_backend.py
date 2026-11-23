@@ -161,8 +161,13 @@ def test_render_proposal_prompt_labels_untrusted_browser_events_and_truncates() 
                 "description": "Click link",
                 "operation": "click",
                 "candidate_id": "cand-1",
+                "interaction_effect": "navigation",
             },
-            {"operation": "click", "candidate_id": "cand-1"},
+            {
+                "operation": "click",
+                "candidate_id": "cand-1",
+                "interaction_effect": "navigation",
+            },
         ),
         (
             {
@@ -314,6 +319,17 @@ def test_parse_action_proposal_handles_handoff_complete_and_errors() -> None:
         (
             json.dumps({"kind": "browser", "description": "Open", "operation": "open"}),
             "requires non-empty url",
+        ),
+        (
+            json.dumps(
+                {
+                    "kind": "browser",
+                    "description": "Click",
+                    "operation": "click",
+                    "candidate_id": "cand-1",
+                }
+            ),
+            "requires non-empty interaction_effect",
         ),
         (
             json.dumps(

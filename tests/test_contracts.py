@@ -9,6 +9,9 @@ import pytest
 from ubc_node.contracts import (
     ActionKind,
     ActionProposal,
+    ActionRisk,
+    ApprovalDecision,
+    ApprovalOutcome,
     BudgetUsage,
     EventKind,
     HumanHandoff,
@@ -167,6 +170,24 @@ def test_policy_decision_validates_handoff_semantics() -> None:
         PolicyDecision(PolicyOutcome.REQUIRE_HUMAN, "owner approval")
     with pytest.raises(ValueError, match="only valid"):
         PolicyDecision(PolicyOutcome.ALLOW, "allowed", HANDOFF)
+    with pytest.raises(ValueError, match="classify the action risk"):
+        PolicyDecision(PolicyOutcome.REQUIRE_APPROVAL, "approve")
+    approval_for_r1 = PolicyDecision(
+        PolicyOutcome.REQUIRE_APPROVAL,
+        "approve",
+        risk=ActionRisk.R1,
+    )
+    assert approval_for_r1.risk is ActionRisk.R1
+    with pytest.raises(ValueError, match="rule_id"):
+        PolicyDecision(PolicyOutcome.ALLOW, "allowed", rule_id=" ")
+
+
+def test_approval_decision_requires_a_reason() -> None:
+    approved = ApprovalDecision(ApprovalOutcome.APPROVE, "owner approved")
+    assert approved.outcome is ApprovalOutcome.APPROVE
+
+    with pytest.raises(ValueError, match="reason"):
+        ApprovalDecision(ApprovalOutcome.DENY, " ")
 
 
 def test_run_event_round_trips_through_json_record() -> None:

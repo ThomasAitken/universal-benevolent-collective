@@ -13,19 +13,27 @@ from tests.fakes import (
     ScriptedPolicyEvaluator,
 )
 from ubc_node.contracts import (
+    ActionApprover,
+    ActionCapability,
+    ActionControl,
     ActionProposal,
+    ActionRisk,
+    ApprovalDecision,
+    ApprovalOutcome,
     EventKind,
     FatalRunError,
     HumanHandoff,
     JsonValue,
     ModelUsage,
     PolicyDecision,
+    PolicyEvaluator,
     PolicyOutcome,
     RunBudget,
     RunEvent,
     RunState,
     TaskSpec,
 )
+from ubc_node.policy import PrototypePolicyConfig, PrototypePolicyEvaluator
 from ubc_node.supervisor import CancellationToken, RunSupervisor
 
 NOW = datetime(2026, 11, 21, 4, 0, tzinfo=UTC)
@@ -48,7 +56,8 @@ def _supervisor(
     proposals: Sequence[ActionProposal],
     *,
     browser: FakeBrowserRuntime | None = None,
-    policy: ScriptedPolicyEvaluator | None = None,
+    policy: PolicyEvaluator | None = None,
+    approver: ActionApprover | None = None,
     cancellation: CancellationToken | None = None,
     cancel_on_propose: bool = False,
 ) -> tuple[RunSupervisor, FakeBrowserRuntime, MemoryEventSink, CancellationToken]:
@@ -63,6 +72,7 @@ def _supervisor(
         browser=fake_browser,
         policy=policy or ScriptedPolicyEvaluator(),
         event_sink=sink,
+        approver=approver,
         clock=lambda: NOW,
         run_id_factory=lambda: "run-1",
     )
@@ -114,7 +124,11 @@ async def test_browser_observation_is_recorded_before_next_proposal() -> None:
     observation = next(
         event for event in sink.events if event.kind is EventKind.BROWSER_ACTION_COMPLETED
     )
-    assert observation.payload == {"observation": {"title": "Example Domain"}}
+    assert observation.payload == {
+        "action_id": "run-1:action:1",
+        "operation": None,
+        "observation": {"title": "Example Domain"},
+    }
 
 
 @pytest.mark.asyncio
@@ -172,6 +186,223 @@ async def test_policy_denial_fails_without_executing_action() -> None:
     assert result.error == "policy denied action: origin is not allowed"
     assert browser.actions == []
     assert sink.events[-1].payload["error"] == result.error
+
+
+class _RecordingApprover:
+    def __init__(
+        self,
+        decision: ApprovalDecision | Exception,
+        *,
+        callback: Callable[[], None] | None = None,
+    ) -> None:
+        self._decision = decision
+        self._callback = callback
+        self.calls: list[tuple[str, TaskSpec, ActionProposal, PolicyDecision]] = []
+
+    async def approve(
+        self,
+        action_id: str,
+        task: TaskSpec,
+        proposal: ActionProposal,
+        policy_decision: PolicyDecision,
+    ) -> ApprovalDecision:
+        self.calls.append((action_id, task, proposal, policy_decision))
+        if self._callback is not None:
+            self._callback()
+        if isinstance(self._decision, Exception):
+            raise self._decision
+        return self._decision
+
+
+def _r2_policy() -> ScriptedPolicyEvaluator:
+    return ScriptedPolicyEvaluator(
+        [
+            PolicyDecision(
+                PolicyOutcome.REQUIRE_APPROVAL,
+                "consequential action",
+                risk=ActionRisk.R2,
+                rule_id="test.r2",
+                capability=ActionCapability.SUBMIT_FORM,
+                control=ActionControl.REQUIRE_APPROVAL,
+            )
+        ]
+    )
+
+
+def _r2_action() -> ActionProposal:
+    return ActionProposal.browser(
+        "Submit the form",
+        {
+            "operation": "click",
+            "candidate_id": "candidate-1",
+            "interaction_effect": "submission",
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_r2_approval_is_correlated_and_executes_exactly_once() -> None:
+    approver = _RecordingApprover(ApprovalDecision(ApprovalOutcome.APPROVE, "operator approved"))
+    action = _r2_action()
+    supervisor, browser, sink, _ = _supervisor(
+        [action, ActionProposal.complete("submitted")],
+        policy=_r2_policy(),
+        approver=approver,
+    )
+
+    result = await supervisor.run(_task())
+
+    assert result.state is RunState.COMPLETED
+    assert browser.actions == [action]
+    assert len(approver.calls) == 1
+    action_id = approver.calls[0][0]
+    related = [event for event in sink.events if event.payload.get("action_id") == action_id]
+    assert [event.kind for event in related] == [
+        EventKind.ACTION_PROPOSED,
+        EventKind.POLICY_DECIDED,
+        EventKind.APPROVAL_REQUESTED,
+        EventKind.APPROVAL_DECIDED,
+        EventKind.BROWSER_ACTION_STARTED,
+        EventKind.BROWSER_ACTION_COMPLETED,
+    ]
+    assert related[1].payload["risk"] == "R2"
+    assert related[1].payload["rule_id"] == "test.r2"
+    assert related[1].payload["capability"] == "submit_form"
+    assert related[1].payload["control"] == "require_approval"
+    assert related[2].payload["capability"] == "submit_form"
+
+
+@pytest.mark.asyncio
+async def test_preapproved_r2_capability_executes_without_action_approval() -> None:
+    action = _r2_action()
+    policy = PrototypePolicyEvaluator(
+        PrototypePolicyConfig(
+            frozenset({"https://example.test"}),
+            {ActionCapability.SUBMIT_FORM: ActionControl.AUTOMATIC},
+        )
+    )
+    supervisor, browser, sink, _ = _supervisor([action], policy=policy)
+
+    result = await supervisor.run(_task(budget=RunBudget(max_steps=1)))
+
+    assert result.error == "step budget exhausted"
+    assert browser.actions == [action]
+    assert not any(event.kind is EventKind.APPROVAL_REQUESTED for event in sink.events)
+    policy_event = next(event for event in sink.events if event.kind is EventKind.POLICY_DECIDED)
+    assert policy_event.payload["risk"] == "R2"
+    assert policy_event.payload["control"] == "automatic"
+
+
+@pytest.mark.asyncio
+async def test_r2_without_approver_fails_closed_and_is_audited() -> None:
+    supervisor, browser, sink, _ = _supervisor([_r2_action()], policy=_r2_policy())
+
+    result = await supervisor.run(_task())
+
+    assert result.state is RunState.FAILED
+    assert result.error == "human approval denied action: no human approver is configured"
+    assert browser.actions == []
+    decision = next(event for event in sink.events if event.kind is EventKind.APPROVAL_DECIDED)
+    assert decision.payload["outcome"] == "deny"
+
+
+@pytest.mark.asyncio
+async def test_r2_human_denial_prevents_execution() -> None:
+    approver = _RecordingApprover(ApprovalDecision(ApprovalOutcome.DENY, "not this action"))
+    supervisor, browser, _, _ = _supervisor(
+        [_r2_action()],
+        policy=_r2_policy(),
+        approver=approver,
+    )
+
+    result = await supervisor.run(_task())
+
+    assert result.state is RunState.FAILED
+    assert result.error == "human approval denied action: not this action"
+    assert browser.actions == []
+
+
+@pytest.mark.asyncio
+async def test_approval_handler_failure_terminates_without_retry() -> None:
+    approver = _RecordingApprover(RuntimeError("approval channel unavailable"))
+    supervisor, browser, sink, _ = _supervisor(
+        [_r2_action()],
+        policy=_r2_policy(),
+        approver=approver,
+    )
+
+    result = await supervisor.run(_task())
+
+    assert result.state is RunState.FAILED
+    assert result.error == "approval failed: RuntimeError: approval channel unavailable"
+    assert browser.actions == []
+    decision = next(event for event in sink.events if event.kind is EventKind.APPROVAL_DECIDED)
+    assert decision.payload["outcome"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_cancellation_after_policy_and_during_approval_prevents_execution() -> None:
+    token_after_policy = CancellationToken()
+
+    class CancellingPolicy:
+        async def evaluate(
+            self,
+            task: TaskSpec,
+            proposal: ActionProposal,
+        ) -> PolicyDecision:
+            del task, proposal
+            token_after_policy.cancel()
+            return PolicyDecision(PolicyOutcome.ALLOW, "allowed")
+
+    supervisor, browser, _, _ = _supervisor(
+        [_r2_action()],
+        policy=CancellingPolicy(),
+        cancellation=token_after_policy,
+    )
+    result = await supervisor.run(_task(), cancellation=token_after_policy)
+    assert result.state is RunState.CANCELLED
+    assert browser.actions == []
+
+    token_during_approval = CancellationToken()
+    approver = _RecordingApprover(
+        ApprovalDecision(ApprovalOutcome.APPROVE, "approved"),
+        callback=token_during_approval.cancel,
+    )
+    supervisor2, browser2, _, _ = _supervisor(
+        [_r2_action()],
+        policy=_r2_policy(),
+        approver=approver,
+        cancellation=token_during_approval,
+    )
+    result2 = await supervisor2.run(_task(), cancellation=token_during_approval)
+    assert result2.state is RunState.CANCELLED
+    assert browser2.actions == []
+
+
+@pytest.mark.asyncio
+async def test_duration_budget_is_checked_after_approval() -> None:
+    now_ref = [NOW]
+    approver = _RecordingApprover(
+        ApprovalDecision(ApprovalOutcome.APPROVE, "approved"),
+        callback=lambda: now_ref.__setitem__(0, NOW + timedelta(seconds=10)),
+    )
+    sink = MemoryEventSink()
+    browser = FakeBrowserRuntime()
+    supervisor = RunSupervisor(
+        agent=ScriptedAgentBackend([_r2_action()]),
+        browser=browser,
+        policy=_r2_policy(),
+        event_sink=sink,
+        approver=approver,
+        clock=lambda: now_ref[0],
+        run_id_factory=lambda: "run-approval-duration",
+    )
+
+    result = await supervisor.run(_task(budget=RunBudget(max_duration_seconds=5)))
+
+    assert result.state is RunState.FAILED
+    assert result.error == "duration budget exhausted"
+    assert browser.actions == []
 
 
 @pytest.mark.asyncio
