@@ -6,9 +6,15 @@ projects.
 
 The repository now contains the first contracts-only node-runtime foundation.
 Start with the [product and architecture specification](docs/product-and-architecture-spec.md)
-and the [Phase 0 runtime contracts](docs/phase-0-contracts.md). The
-[Phase 1 browser adapter](docs/phase-1-stagehand-browser.md) provides the first
-policy-shaped Stagehand implementation.
+and the [shared knowledge base specification](docs/knowledge-base-spec.md).
+The knowledge-base wire formats separate the
+[immutable thesis revision](docs/knowledge-base-thesis.schema.json),
+[mutable workflow state](docs/knowledge-base-thesis-workflow.schema.json), and
+[composed read view](docs/knowledge-base-thesis-view.schema.json). The
+[Phase 0 runtime contracts](docs/prototype-phase-0-contracts.md) define the
+runtime foundation; the
+[Phase 1 browser adapter](docs/prototype-phase-1-stagehand-browser.md) provides
+the first policy-shaped Stagehand implementation.
 
 ## Current status
 

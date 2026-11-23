@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.universalbenevolentcollective.org/knowledge-base-thesis-view.schema.json",
+  "title": "UBC Knowledge Base Thesis Read View",
+  "description": "Composed API and public-site view of an immutable thesis revision, its mutable workflow state, and rebuildable service projections.",
+  "x-ubc-boundary": {
+    "artifact_role": "composed_read_view",
+    "included_in_content_digest": false
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["revision", "workflow", "projections"],
+  "properties": {
+    "revision": {
+      "$ref": "knowledge-base-thesis.schema.json"
+    },
+    "workflow": {
+      "$ref": "knowledge-base-thesis-workflow.schema.json"
+    },
+    "projections": {
+      "$ref": "#/$defs/projections"
+    }
+  },
+  "$comment": "The service must verify that revision.thesis_id and revision.revision.revision_id equal the corresponding workflow identifiers, and that every projection is derivable from canonical records or current service metadata.",
+  "$defs": {
+    "projections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slug",
+        "public_url",
+        "visibility",
+        "overall_confidence",
+        "child_thesis_ids",
+        "inbound_relations",
+        "current_source_statuses",
+        "generated_at"
+      ],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 160,
+          "description": "Current human-readable route component; it may change without altering thesis identity or an immutable revision."
+        },
+        "public_url": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["private_draft", "reviewers", "public"],
+          "description": "Derived from lifecycle state and access policy."
+        },
+        "overall_confidence": {
+          "$ref": "#/$defs/confidenceProjection"
+        },
+        "child_thesis_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "knowledge-base-thesis.schema.json#/$defs/thesisId"
+          },
+          "uniqueItems": true,
+          "description": "Reverse links derived from other revisions' authored parent_theses edges."
+        },
+        "inbound_relations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inboundRelation"
+          },
+          "description": "Relations authored on other theses whose target is this thesis."
+        },
+        "current_source_statuses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/currentSourceStatus"
+          },
+          "description": "Current correction, retraction, or withdrawal state, distinct from the immutable status_at_revision snapshot."
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "confidenceProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "$comment": "The application must derive level from the immutable theoretical and empirical basis strengths using the matrix identified by method.",
+      "x-ubc-derivation": {
+        "method": "basis_matrix_v1",
+        "inputs": [
+          "revision.epistemic_assessment.theoretical_basis.strength",
+          "revision.epistemic_assessment.empirical_basis.strength"
+        ],
+        "symmetric": false,
+        "matrix": {
+          "none": {
+            "very_low": "very_low",
+            "low": "very_low",
+            "medium": "low",
+            "high": "low",
+            "very_high": "low"
+          },
+          "very_low": {
+            "very_low": "very_low",
+            "low": "low",
+            "medium": "low",
+            "high": "medium",
+            "very_high": "medium"
+          },
+          "low": {
+            "very_low": "low",
+            "low": "low",
+            "medium": "medium",
+            "high": "medium",
+            "very_high": "medium"
+          },
+          "medium": {
+            "very_low": "low",
+            "low": "medium",
+            "medium": "medium",
+            "high": "high",
+            "very_high": "high"
+          },
+          "high": {
+            "very_low": "medium",
+            "low": "medium",
+            "medium": "high",
+            "high": "very_high",
+            "very_high": "very_high"
+          },
+          "very_high": {
+            "very_low": "medium",
+            "low": "medium",
+            "medium": "high",
+            "high": "very_high",
+            "very_high": "very_high"
+          },
+          "not_applicable": {
+            "very_low": "very_low",
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "very_high": "very_high"
+          }
+        },
+        "unknown_rule": "if either input is unknown, the result is unknown",
+        "not_applicable_rule": "empirical basis cannot be not_applicable; if theoretical basis is not_applicable, return the empirical basis"
+      },
+      "required": ["method", "level", "explanation"],
+      "properties": {
+        "method": {
+          "const": "basis_matrix_v1"
+        },
+        "level": {
+          "type": "string",
+          "enum": ["very_low", "low", "medium", "high", "very_high", "unknown"]
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10000
+        }
+      }
+    },
+    "inboundRelation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_thesis_id", "relation", "explanation"],
+      "properties": {
+        "source_thesis_id": {
+          "$ref": "knowledge-base-thesis.schema.json#/$defs/thesisId"
+        },
+        "relation": {
+          "type": "string",
+          "enum": ["supports", "contradicts", "depends_on", "contextualizes", "overlaps", "supersedes"],
+          "description": "The canonical relation authored on source_thesis_id and directed toward the thesis represented by this view."
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      }
+    },
+    "currentSourceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "status", "checked_at"],
+      "properties": {
+        "source_id": {
+          "$ref": "knowledge-base-thesis.schema.json#/$defs/sourceId"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "corrected", "retracted", "withdrawn", "unknown"]
+        },
+        "checked_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

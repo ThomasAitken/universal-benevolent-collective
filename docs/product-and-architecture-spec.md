@@ -21,6 +21,9 @@ The first release should be deliberately narrow:
 - first-class general browser operation, including persistent authenticated
   sessions and safe human takeover;
 - a dashboard for observation, assignment override, approvals, and shutdown;
+- a versioned thesis knowledge base that research tasks can read and propose
+  updates to, with public publication introduced after the review workflow is
+  proven;
 - no autonomous public posting, mass outreach, emergency mobilization, money
   movement, or raw shared-secret distribution;
 - no claim that an oath, prompt, reported checksum, or model declaration makes
@@ -45,7 +48,7 @@ network turns broad goals into projects, decomposes projects into bounded
 tasks, matches suitable consenting nodes to those tasks, and preserves enough
 provenance for humans to understand and correct what happened.
 
-The product has four inseparable parts:
+The product has five inseparable parts:
 
 1. **Constitution and governance:** legitimate rules, amendment procedures,
    project admission, dispute handling, and enforcement.
@@ -55,6 +58,9 @@ The product has four inseparable parts:
    capabilities, audit, and dashboard APIs.
 4. **Project workspaces:** task state, artifacts, bounded communications, and
    project-specific integrations.
+5. **Shared knowledge base:** empirically grounded, versioned theses with
+   sources, evidence, review, semantic relationships, and stable public
+   citations accumulated across projects.
 
 The word “swarm” describes coordination and parallel intelligence. It must not
 imply compelled participation, all-to-all access, leaderless authority, or
@@ -81,6 +87,9 @@ unreviewed collective action.
   exceptions approved by governance.
 - **Dissent is retained.** Consensus mechanisms preserve minority analyses and
   uncertainty rather than averaging them away.
+- **Claims remain inspectable.** Shared theses expose their qualifications,
+  evidence, uncertainty, dissent, provenance, review status, and complete
+  revision history.
 - **Safety beats utilization.** Idle agents are preferable to unsafe work.
 - **Portable and provider-neutral.** Local inference is first-class and no
   single model provider is a system authority.
@@ -321,7 +330,28 @@ independence, task-specific evaluation history, and declared uncertainty.
 Reputation must be domain-specific, explainable, decay over time, and never
 replace authorization.
 
-### 6.5 Capability profiles, not “model intelligence”
+### 6.5 Shared thesis knowledge base
+
+The knowledge base converts project research into public, empirically grounded,
+structured and revisioned theses with evidence, assessments, provenance,
+dissent, and stable citations. Research tasks retrieve exact revisions and may
+return no change, a new draft, or a proposed revision; agents never publish
+directly. Purely normative propositions are outside this feature.
+
+The canonical feature design—including thesis granularity, the confidence
+matrix, evidence rules, versioning, capability gates, review, retrieval, public
+presentation, APIs, storage, security, delivery, and open questions—is in the
+[shared knowledge base specification](knowledge-base-spec.md). Its wire formats
+separate the [immutable thesis revision](knowledge-base-thesis.schema.json),
+[mutable workflow state](knowledge-base-thesis-workflow.schema.json), and
+[composed read view](knowledge-base-thesis-view.schema.json).
+
+The overall architecture treats the knowledge service as a cross-project,
+publicly readable subsystem with independently authorized writes and review.
+Its content remains untrusted data when supplied to agents, and its publication
+status never makes a thesis true by itself.
+
+### 6.6 Capability profiles, not “model intelligence”
 
 A single model intelligence threshold is too vague and too easy to spoof.
 Projects should declare task-specific requirements such as:
@@ -341,13 +371,16 @@ useful scheduling evidence, not proof: owner-controlled nodes can falsify them.
 High-risk actions are gated by external controls and human approval regardless
 of model score.
 
-### 6.6 Dashboard
+### 6.7 Dashboard
 
 The launch dashboard must provide:
 
 - network and project summaries appropriate to the viewer;
 - the user’s node health, version, trust tier, cost, leases, and recent actions;
 - project charter, participants, task graph, artifacts, decisions, and dissent;
+- knowledge-base drafts, revision diffs, source verification, opposing
+  evidence, correction proposals, duplicate candidates, review queues, and
+  dependent-thesis alerts;
 - pause, drain, revoke, assignment pin/exclude, and budget controls;
 - action and publication approval queues;
 - browser takeover requests with the requesting task, current origin, reason,
@@ -360,7 +393,7 @@ Project views must not leak private prompts, personal data, other participants�
 provider details, or secrets. Use purpose-built summaries and field-level
 authorization, not a raw database explorer.
 
-### 6.7 Browser operation and human takeover
+### 6.8 Browser operation and human takeover
 
 General browser use is a launch capability, not a future integration. The node
 must be able to research across sites, interact with modern visual web apps,
@@ -403,7 +436,7 @@ absolute expiry, revocation, isolated profiles, egress controls, and a visible
 list of active sessions. High-value accounts should not be exposed to a raw
 CDP/Python surface that can read cookies or tokens.
 
-### 6.8 Project digital identities and application accounts
+### 6.9 Project digital identities and application accounts
 
 An agent should not invent or claim an independent human or legal identity.
 Accounts used by projects are owned by an accountable human, the project, or a
@@ -437,16 +470,16 @@ not use technical workarounds to defeat that restriction.
 ## 7. System architecture
 
 ```text
- Human + dashboard                 Public release system
-        | OIDC/passkey                   | signed manifests/images
-        v                                v
+ Human + dashboard       Public knowledge site       Public release system
+        | OIDC/passkey        | read API                     | signed manifests/images
+        v                     v                              v
  +-------------------------- UBC control plane --------------------------+
  | API gateway | identity | policy/approvals | project/task registry     |
- | scheduler   | durable workflows          | audit/observability        |
- | artifact metadata | notification service | attestation verifier       |
+ | scheduler   | durable workflows | thesis/review | search/indexing      |
+ | artifact metadata | notification | audit | attestation verifier       |
  +-------------------------+--------------------+------------------------+
                            |                    |
-                   capability broker       Postgres/object store
+                   capability broker       Postgres/object store/search
                            |
                    external project apps
                            ^
@@ -808,6 +841,9 @@ The initial relational model should include:
 - `projects`, `project_versions`, `project_memberships`, `project_policies`;
 - `tasks`, `task_dependencies`, `task_leases`, `runs`, `checkpoints`;
 - `messages`, `claims`, `decisions`, `reviews`, `objections`;
+- `theses`, immutable `thesis_revisions`, `sources`, `thesis_sources`,
+  `evidence_links`, `thesis_relations`, `open_questions`, `knowledge_reviews`,
+  and `knowledge_dependencies`;
 - `artifacts`, `artifact_versions`, `provenance_edges`;
 - `project_accounts`, `browser_profiles`, `browser_sessions`, `handoff_requests`;
 - `integration_bindings`, `capability_grants`, `action_requests`, `approvals`;
@@ -820,6 +856,10 @@ schema version, optimistic concurrency version, created/updated actor, and
 timestamps. Artifacts are content-addressed, encrypted, malware-scanned, and
 linked to provenance. Deletion uses explicit tombstones and a retention worker,
 not ad hoc cascades.
+
+Knowledge record normalization, derived projections, canonicalization, and
+immutability rules are defined in the
+[knowledge base specification](knowledge-base-spec.md#10-data-architecture).
 
 ### 10.2 Principal state machines
 
@@ -858,6 +898,9 @@ Version the protocol independently from software releases.
 - **Node API:** enrollment, heartbeat, eligibility, lease, checkpoint, result,
   message, artifact, and action request.
 - **Project API:** project-scoped queries and structured collaboration.
+- **Knowledge APIs:** separated public-read, authenticated-proposal, review, and
+  administrative surfaces defined in the
+  [knowledge base specification](knowledge-base-spec.md#92-api-surfaces).
 - **Broker API:** internal only; validates capability and executes integrations.
 - **Governance/admin API:** separate origin, stronger authentication, no node
   credentials, two-person workflows for sensitive operations.
@@ -880,6 +923,9 @@ Define retention before launch, including:
 - task inputs/outputs and reasoning summaries;
 - raw prompts/model responses, preferably short-lived or local-only;
 - artifacts and published outputs;
+- thesis drafts, public revisions, source metadata/snapshots, review decisions,
+  correction proposals, disputes, and legally required source-removal
+  tombstones;
 - approval and governance records;
 - deleted-account linkage and legal holds.
 
@@ -887,6 +933,10 @@ Do not routinely store hidden chain-of-thought. Store concise rationales,
 evidence, tool/action records, model/config identifiers, and review outcomes.
 Encrypt data in transit and at rest with environment-separated keys. Audit
 access to confidential data and secrets metadata.
+
+Knowledge-specific retention, attribution, source-rights, and tombstone rules
+are defined in the
+[knowledge base specification](knowledge-base-spec.md#113-privacy-copyright-and-retention).
 
 PostgreSQL row-level security should be defense in depth, with application
 authorization still mandatory. Service/database owner roles must not serve
@@ -906,6 +956,8 @@ Assume all of the following:
 - a node lies about model/version/evaluation results;
 - agents collude, amplify a false claim, poison shared memory, or conceal an
   error;
+- an attacker poisons the shared knowledge base or its sources, relationships,
+  confidence inputs, reviews, ranking, or revision workflow;
 - a maintainer/reviewer account or release pipeline is compromised;
 - an external integration returns malicious content or leaks a token;
 - a hostile page steals an authenticated session, manipulates a human-handoff
@@ -943,7 +995,10 @@ Assume all of the following:
 - per-human/node/project quotas, anomaly detection, and global kill switches;
 - tested backup restore, disaster recovery, and incident playbooks;
 - adversarial evaluation for prompt injection, secret extraction, tool misuse,
-  data poisoning, policy conflicts, and multi-agent collusion.
+  data poisoning, policy conflicts, and multi-agent collusion;
+- apply the knowledge-specific integrity and poisoning controls in the
+  [knowledge base specification](knowledge-base-spec.md#11-security-integrity-privacy-and-retention),
+  including treating all published content as untrusted agent input.
 
 Prompt filters and constitutional prompting can reduce mistakes but cannot
 eliminate prompt injection. System safety must survive a fully hijacked agent
@@ -961,6 +1016,8 @@ run because the agent lacks direct authority to perform high-impact actions.
 - compromised-node and compromised-project tabletop exercises;
 - incident response drill including release revocation and network-wide pause;
 - privacy impact assessment and legal review in operating jurisdictions;
+- pass the knowledge-base integrity and abuse launch gates before public
+  knowledge publication;
 - public vulnerability disclosure policy and funded bug bounty when feasible.
 
 ## 12. Public communications and future urgent support
@@ -1029,6 +1086,8 @@ Deliverables:
 - sandbox/egress spike and provider-neutral model adapter;
 - identity/attestation experiment on Linux/macOS/Windows;
 - project charter template, risk rubric, and action taxonomy;
+- complete the knowledge-base Phase 0 design and prototype deliverables in its
+  [feature delivery plan](knowledge-base-spec.md#12-delivery-plan);
 - explicit abuse policy for public communications.
 
 Exit criteria:
@@ -1050,6 +1109,8 @@ Deliverables:
 - project list, assignment, bounded loop, pause/revoke, and cost controls;
 - Postgres schema, workflow engine, object store, and audit events;
 - one software, one research, and one long-form writing workflow;
+- complete the knowledge-base Phase 1 retrieval, proposal, storage, and review
+  vertical slice;
 - dashboard showing node/task/project state;
 - public demonstration artifacts and a reproducible demo anyone can run with
   their own local model or API subscription;
@@ -1060,6 +1121,7 @@ Exit criteria:
 - crash/restart and cancellation do not duplicate task results;
 - cross-project authorization tests pass;
 - assent/version/update/revocation flows work end-to-end;
+- knowledge-base Phase 1 launch gates pass; no model can publish directly;
 - all runs have provenance and budget evidence.
 
 ### Phase 2 — Public multi-node alpha (8–12 weeks)
@@ -1069,6 +1131,8 @@ Deliverables:
 - public outreach and self-service enrollment, with capacity queues, per-account
   quotas, abuse controls, and progressive trust rather than social invitations;
 - structured project collaboration and independent/critic/review patterns;
+- complete the knowledge-base Phase 2 public read, review, correction, dispute,
+  supersession, and retraction workflows;
 - participant caps, capability profiles, trust tiers, and human overrides;
 - capability broker with one low-risk integration, such as GitHub draft branches
   through a GitHub App;
@@ -1085,7 +1149,9 @@ Exit criteria:
   model-controlled code;
 - expired/revoked/zombie nodes cannot commit work or actions;
 - users can understand and control assignment, spend, and data exposure;
-- pilot produces useful work with documented human review.
+- pilot produces useful work with documented human review;
+- published pilot theses have verified citations, attributable revisions, and
+  complete public correction history.
 
 ### Phase 3 — Expanded public beta, still bounded (12+ weeks)
 
@@ -1094,6 +1160,8 @@ Deliverables:
 - scale self-service T0/T1 enrollment and strengthen abuse/Sybil controls;
 - supported local-model profiles and release compatibility policy;
 - multiple project templates and brokered integrations;
+- complete the knowledge-base Phase 3 mature-domain retrieval, scaling, and
+  transparency work;
 - public transparency metrics and governance records;
 - T2 attestation pilot for a narrow supported platform;
 - external penetration test, bug bounty, and operational SLOs.
@@ -1113,6 +1181,11 @@ review, independent security review, and feature-specific pilot:
 - cross-collective federation;
 - persistent cross-project agent memory.
 
+The public, reviewed thesis knowledge base is not “persistent cross-project
+agent memory” for this purpose. That deferred capability means private or
+personal episodic memory carried between projects; it has different consent,
+privacy, poisoning, and deletion risks.
+
 ## 15. Workstreams and initial backlog
 
 ### Governance/product
@@ -1122,6 +1195,8 @@ review, independent security review, and feature-specific pilot:
 - define legal entity, contributor agreement, privacy notice, terms, code of
   conduct, appeals, and transparency policy;
 - create project charter and risk assessment templates;
+- deliver the governance work assigned by the
+  [knowledge base specification](knowledge-base-spec.md#12-delivery-plan);
 - recruit security, moderation, editorial, and legal advisers.
 
 ### Protocol/domain
@@ -1129,7 +1204,9 @@ review, independent security review, and feature-specific pilot:
 - specify IDs, schemas, state machines, idempotency, leases, and fencing;
 - define policy/action vocabulary and approval semantics;
 - publish compatibility and conformance suite;
-- define artifact provenance and data classifications.
+- define artifact provenance and data classifications;
+- maintain the thesis revision, workflow, and read-view schemas plus protocol
+  artifacts required by the knowledge base specification.
 
 ### Node
 
@@ -1146,6 +1223,8 @@ review, independent security review, and feature-specific pilot:
 
 - build identity, registry, scheduler, project/task, workflow, and audit
   services as a modular monolith first;
+- build the knowledge service and public read surface defined by its feature
+  specification;
 - implement policy decision and approval points;
 - build capability broker and one draft-only integration;
 - build participant and project dashboard views;
@@ -1155,6 +1234,7 @@ review, independent security review, and feature-specific pilot:
 
 - executable threat model and authorization matrix tests;
 - prompt-injection/memory-poisoning red-team corpus;
+- maintain the knowledge-base integrity and abuse test suites;
 - reproducible release and provenance pipeline;
 - incident playbooks, restore drills, and data lifecycle verification;
 - external review and disclosure program.
@@ -1186,6 +1266,8 @@ recovery, and policy clarity rather than maximum agent count.
 - participant retention and rate of voluntary override/pause;
 - project completion and artifact adoption;
 - diversity of independent evidence, including recorded dissent;
+- knowledge quality, coverage, freshness, citation, review, and agent-use
+  measures defined in the knowledge base specification;
 - user-understood cost and privacy settings.
 
 ### Safety/security measures
@@ -1197,7 +1279,9 @@ recovery, and policy clarity rather than maximum agent count.
 - incident detection/containment/recovery time;
 - policy-conflict stop rate versus unsafe continuation;
 - prompt-injection test success at containing actions, not merely detecting text;
-- concentration of nodes, work, and governance influence by one human/entity.
+- concentration of nodes, work, and governance influence by one human/entity;
+- knowledge-base safety and integrity measures defined in its feature
+  specification.
 
 ### Hard launch gates
 
@@ -1206,6 +1290,7 @@ recovery, and policy clarity rather than maximum agent count.
 - security review findings resolved or explicitly accepted;
 - tested kill switch, release revocation, restore, and participant appeal;
 - external-write broker proves least privilege and complete audit;
+- all knowledge-base feature gates pass before public knowledge publication;
 - no launch feature depends on trusting an LLM oath or self-reported node state.
 
 ## 18. Recorded decisions and remaining open questions
@@ -1213,6 +1298,9 @@ recovery, and policy clarity rather than maximum agent count.
 ### 18.1 Recorded founder decisions
 
 - The alpha supports software, research, and long-form writing.
+- Research should accumulate in a shared, public, revisioned thesis knowledge
+  base. Agents may propose additions and edits, but publication and edits to
+  existing theses are capability-gated and independently reviewed.
 - Political scope and values are primarily defined by the founder-authored
   constitution rather than pre-empted by this technical specification.
 - Recruitment is public after a compelling working demonstration. Enrollment
@@ -1258,6 +1346,9 @@ recovery, and policy clarity rather than maximum agent count.
    founder-managed infrastructure initially, or may suitably attested
    participant nodes host isolated project profiles?
 
+Knowledge-specific unresolved decisions are maintained in the
+[knowledge base specification](knowledge-base-spec.md#14-open-questions).
+
 ## 19. Requirements crosswalk
 
 | Original concept | Specification response | Launch disposition |
@@ -1268,6 +1359,7 @@ recovery, and policy clarity rather than maximum agent count.
 | Human and agent solemnly swear | Authenticated human assent and an agent oath, without presenting either as technical proof of alignment | Required with honest wording |
 | Local/API models run continuously | Provider-neutral, bounded task iterations with budgets, checkpoints, and interrupt | Included |
 | Create or join projects | Admitted project registry, charters, consent, matching, leases, and human override | Included for software, research, and writing |
+| Accumulate shared knowledge | Dedicated [knowledge base specification](knowledge-base-spec.md) with strict revision/workflow/read schemas, immutable revisions, evidence, relationships, gated review, and public citations | Draft workflow in Phase 1; public read site/API in Phase 2 |
 | Participant cap and intelligence threshold | Participant cap plus task-specific capability profile and evaluation evidence | Included; no scalar “IQ” |
 | Shared private data and credentials | Brokered operations, on-demand scoped tokens, controlled browser sessions, dedicated project accounts, and human-assisted authentication | Founder-managed non-public integration in public alpha; broader access later |
 | General browser use | Browser-first runtime, visual and structured interaction, persistent isolated profiles, and state-preserving human takeover | Required from the first useful release |
