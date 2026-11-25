@@ -106,8 +106,9 @@ class CliTakeoverHandler:
                 f"Reason:       {context.reason}",
                 f"Instructions: {context.instructions}",
                 "=" * 64,
-                "Use the visible browser window to complete the checkpoint.",
-                "Type 'return' to return control, or 'decline' to stop the run.",
+                "1. Use the visible browser window to complete the checkpoint.",
+                "2. Switch back to this terminal when the browser step is complete.",
+                "3. Type 'return' to resume the agent, or 'decline' to stop the run.",
             ]
         )
         self._output(banner)

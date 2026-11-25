@@ -49,6 +49,8 @@ async def test_cli_takeover_handler_requires_explicit_return_or_decline() -> Non
     assert "http://127.0.0.1:8080" in outputs[0]
     assert "Fake verification checkpoint" in outputs[0]
     assert "PAUSED" in outputs[0]
+    assert "Switch back to this terminal" in outputs[0]
+    assert "Type 'return' to resume the agent" in outputs[0]
     assert outputs.count("Please explicitly enter 'return' or 'decline'.") == 2
 
     outputs2: list[str] = []

@@ -4,8 +4,8 @@ The Universal Benevolent Collective (UBC) is a proposed, constitution-governed
 network of human-supervised AI agents that collaborate on public-interest
 projects.
 
-The repository contains a bounded single-node prototype through policy and
-audit enforcement.
+The repository contains a bounded single-node prototype and repeatable fixture
+demonstration.
 Start with the [product and architecture specification](docs/product-and-architecture-spec.md)
 and the [shared knowledge base specification](docs/knowledge-base-spec.md).
 The knowledge-base wire formats separate the
@@ -18,12 +18,14 @@ runtime foundation; the
 the first policy-shaped Stagehand implementation. The
 [Phase 2 bounded agent loop](docs/prototype-phase-2-bounded-agent-loop.md),
 [Phase 3 human takeover](docs/prototype-phase-3-human-takeover.md), and
-[Phase 4 policy and audit](docs/prototype-phase-4-policy-and-audit.md) complete
-the current prototype foundation.
+[Phase 4 policy and audit](docs/prototype-phase-4-policy-and-audit.md) establish
+the runtime foundation. The
+[Phase 5 demonstration](docs/prototype-phase-5-demonstration.md) packages it as
+a restartable, cited research workflow.
 
 ## Current status
 
-- Stage: Phase 4 policy and audit / pre-alpha
+- Stage: Phase 5 repeatable single-node demonstration / pre-alpha
 - Target first network release: public, capacity-limited alpha after a working
   single-node demonstration
 - Initial scope: software and research/writing projects
@@ -57,6 +59,7 @@ with [Task](https://taskfile.dev/).
 ```shell
 task bootstrap
 uv run ubc doctor
+uv run ubc demo --provider local
 ```
 
 `task bootstrap` creates the development environment. The recommended VS Code
