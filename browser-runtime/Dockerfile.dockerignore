@@ -1,0 +1,11 @@
+.git
+.github
+.ubc
+.venv
+dist
+docs
+tests
+tmp
+**/__pycache__
+**/*.pyc
+**/.DS_Store

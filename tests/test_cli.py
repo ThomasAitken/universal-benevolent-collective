@@ -35,6 +35,61 @@ def test_doctor_command(capsys: pytest.CaptureFixture[str]) -> None:
     assert "Project scaffold: ready" in output
 
 
+def test_release_manifest_command_writes_verified_metadata(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = Path(__file__).parents[1]
+    output = tmp_path / "manifest.json"
+    assert (
+        run(
+            [
+                "release-manifest",
+                "--root",
+                str(root),
+                "--release-id",
+                "test-release",
+                "--constitution-version",
+                "test-draft",
+                "--browser-image-reference",
+                "localhost/ubc-browser",
+                "--browser-image-digest",
+                f"sha256:{'a' * 64}",
+                "--output",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    assert '"schema_version": 1' in output.read_text()
+    assert str(output) in capsys.readouterr().out
+
+
+def test_release_manifest_command_reports_invalid_input(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert (
+        run(
+            [
+                "release-manifest",
+                "--root",
+                str(tmp_path),
+                "--release-id",
+                "test-release",
+                "--constitution-version",
+                "test-draft",
+                "--browser-image-reference",
+                "localhost/ubc-browser",
+                "--browser-image-digest",
+                f"sha256:{'a' * 64}",
+                "--output",
+                str(tmp_path / "manifest.json"),
+            ]
+        )
+        == 1
+    )
+    assert "release manifest failed" in capsys.readouterr().err
+
+
 def test_console_entry_point(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["ubc", "version"])
 

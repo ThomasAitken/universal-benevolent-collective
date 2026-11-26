@@ -1,0 +1,44 @@
+{
+  "browser_image": {
+    "build_context_sha256": "sha256:81b00dfa34b783681d55e73009f34fa826e07a1dc27e588234c40160ad568b0e",
+    "digest": "sha256:f3d70b7b68db8d9ee7d00452bd22c8abb665aac2f10e9a93f7b0b9d808ee66f3",
+    "reference": "localhost/ubc-browser"
+  },
+  "constitution": {
+    "path": "CONSTITUTION.md",
+    "sha256": "sha256:c2c85edf2542cf38ca8ab1fe86561454f6c401880921b076bf1cc153e3c0b86b",
+    "version": "0.1-draft"
+  },
+  "dependency_lock": {
+    "path": "uv.lock",
+    "sha256": "sha256:2e86b5d51f9b558f3fce75832644f2c8bf793ca0eb9cbf8377b9f74d2b37934c"
+  },
+  "isolation": {
+    "backend": "linux-rootful-podman-service",
+    "contract_version": 1
+  },
+  "release_id": "0.1.0-c01",
+  "schema_version": 1,
+  "trusted_core": {
+    "audit_writer": {
+      "entrypoint": "ubc_node.event_log:JsonlEventLog",
+      "path": "src/ubc_node/event_log.py",
+      "sha256": "sha256:b055b36095036f1969828c1c66091a58300520c1c811664c49e4eb849a3e14df"
+    },
+    "executable_policy": {
+      "entrypoint": "ubc_node.policy:PrototypePolicyEvaluator",
+      "path": "src/ubc_node/policy.py",
+      "sha256": "sha256:996c510cd3de505494e353fe56a9edac461b6b8c51de182012dafecfed968470"
+    },
+    "node_key_interface": {
+      "entrypoint": "ubc_node.node_keys:NodeKey",
+      "path": "src/ubc_node/node_keys.py",
+      "sha256": "sha256:9707d63edef2ed4537c5d4e7f5763937662814dca19b2114a63530ab7d398530"
+    },
+    "supervisor": {
+      "entrypoint": "ubc_node.supervisor:RunSupervisor",
+      "path": "src/ubc_node/supervisor.py",
+      "sha256": "sha256:d339df788af65a541920f60bfa402c99e2c103d016da9eb0ef03730fc6f66682"
+    }
+  }
+}

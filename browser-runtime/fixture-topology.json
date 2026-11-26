@@ -1,0 +1,50 @@
+{
+  "networks": {
+    "control": {
+      "external_access": false,
+      "members": [
+        "trusted_node",
+        "browser"
+      ]
+    },
+    "egress": {
+      "external_access": false,
+      "members": [
+        "browser",
+        "egress_gate"
+      ]
+    },
+    "fixture": {
+      "external_access": false,
+      "members": [
+        "egress_gate",
+        "approved_fixture",
+        "denied_fixture"
+      ]
+    }
+  },
+  "roles": {
+    "approved_fixture": {
+      "authority": "fixture content only"
+    },
+    "browser": {
+      "host_ports": [],
+      "read_only_base": true,
+      "writable_areas": [
+        "runtime",
+        "profile",
+        "quarantine"
+      ]
+    },
+    "denied_fixture": {
+      "authority": "contact counter only"
+    },
+    "egress_gate": {
+      "authority": "destination and method policy"
+    },
+    "trusted_node": {
+      "authority": "supervision, policy, node signing, core audit"
+    }
+  },
+  "version": 1
+}

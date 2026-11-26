@@ -10,6 +10,12 @@ from typing import NoReturn
 
 from ubc_node import __version__
 from ubc_node.demo import DemoCancelled, DemoError, run_phase5_demo
+from ubc_node.release_manifest import (
+    ReleaseManifestError,
+    create_release_manifest,
+    verify_release_manifest,
+    write_release_manifest,
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -20,6 +26,15 @@ def _build_parser() -> argparse.ArgumentParser:
     subcommands = parser.add_subparsers(dest="command")
     subcommands.add_parser("version", help="Show the installed UBC node version.")
     subcommands.add_parser("doctor", help="Check the local development runtime.")
+    manifest = subcommands.add_parser(
+        "release-manifest", help="Create verified trusted-core release metadata."
+    )
+    manifest.add_argument("--root", type=Path, default=Path.cwd(), help=argparse.SUPPRESS)
+    manifest.add_argument("--release-id", required=True)
+    manifest.add_argument("--constitution-version", required=True)
+    manifest.add_argument("--browser-image-reference", required=True)
+    manifest.add_argument("--browser-image-digest", required=True)
+    manifest.add_argument("--output", type=Path, required=True)
     demo = subcommands.add_parser("demo", help="Run or resume the Phase 5 fixture demonstration.")
     demo.add_argument(
         "--workspace",
@@ -59,6 +74,21 @@ def run(argv: Sequence[str] | None = None) -> int:
         print(f"ubc-node {__version__}")
         print(f"Python {platform.python_version()}")
         print("Project scaffold: ready")
+    elif arguments.command == "release-manifest":
+        try:
+            manifest = create_release_manifest(
+                arguments.root,
+                release_id=arguments.release_id,
+                constitution_version=arguments.constitution_version,
+                browser_image_reference=arguments.browser_image_reference,
+                browser_image_digest=arguments.browser_image_digest,
+            )
+            verify_release_manifest(arguments.root, manifest)
+            write_release_manifest(arguments.output, manifest)
+        except (ReleaseManifestError, OSError) as error:
+            print(f"release manifest failed: {error}", file=sys.stderr)
+            return 1
+        print(f"Release manifest: {arguments.output}")
     elif arguments.command == "demo":
         try:
             result = asyncio.run(

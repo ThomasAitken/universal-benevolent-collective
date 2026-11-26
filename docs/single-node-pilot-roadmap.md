@@ -3,7 +3,7 @@
 **Document status:** Active living work tracker  
 **Delivery model:** Direct, ordered commits to `main`  
 **Last updated:** 2026-11-26  
-**Current focus:** C01 — trusted core and isolated-browser foundation  
+**Current focus:** C02 — enforced browser security boundary  
 **Pilot gate:** One dedicated, low-value project account after C01–C08 pass
 
 This roadmap turns the implemented
@@ -51,7 +51,7 @@ reflects the resulting behavior and any residual limitation.
 
 | Unit | Commit | Status | Depends on | Result |
 |---|---|---|---|---|
-| SNP-01 | C01 | queued | Prototype baseline | Trusted-core manifest, browser image, isolation contracts, and fixture topology |
+| SNP-01 | C01 | done | Prototype baseline | Verified trusted-core manifest, pinned non-root browser image, isolation contracts, and fixture topology |
 | SNP-02 | C02 | queued | C01 | Chromium and worker execute inside an OS-enforced security boundary |
 | SNP-03 | C03 | queued | C02 | Authenticated proxy-only HTTP/HTTPS egress with controlled DNS and bypass resistance |
 | SNP-04 | C04 | queued | C01 | Downloads remain quarantined until deterministic scanning and promotion |

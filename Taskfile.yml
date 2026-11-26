@@ -58,6 +58,11 @@ tasks:
     cmds:
       - uv build
 
+  build-browser-image:
+    desc: Build the pinned non-root browser-worker image
+    cmds:
+      - docker build --file browser-runtime/Dockerfile --tag ubc-browser:local .
+
   check:
     desc: Run all validation and build checks
     cmds:

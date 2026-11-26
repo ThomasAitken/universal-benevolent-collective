@@ -1,0 +1,159 @@
+{
+  "$id": "https://universal-benevolent-collective.example/schemas/release-manifest-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "browser_image": {
+      "additionalProperties": false,
+      "properties": {
+        "build_context_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "reference": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "reference",
+        "digest",
+        "build_context_sha256"
+      ],
+      "type": "object"
+    },
+    "constitution": {
+      "$ref": "#/$defs/versionedArtifact"
+    },
+    "dependency_lock": {
+      "$ref": "#/$defs/artifact"
+    },
+    "isolation": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "const": "linux-rootful-podman-service"
+        },
+        "contract_version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "backend",
+        "contract_version"
+      ],
+      "type": "object"
+    },
+    "release_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "trusted_core": {
+      "additionalProperties": false,
+      "properties": {
+        "audit_writer": {
+          "$ref": "#/$defs/component"
+        },
+        "executable_policy": {
+          "$ref": "#/$defs/component"
+        },
+        "node_key_interface": {
+          "$ref": "#/$defs/component"
+        },
+        "supervisor": {
+          "$ref": "#/$defs/component"
+        }
+      },
+      "required": [
+        "supervisor",
+        "executable_policy",
+        "audit_writer",
+        "node_key_interface"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "release_id",
+    "constitution",
+    "trusted_core",
+    "dependency_lock",
+    "browser_image",
+    "isolation"
+  ],
+  "title": "UBC trusted-core release manifest",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "component": {
+      "additionalProperties": false,
+      "properties": {
+        "entrypoint": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "path",
+        "entrypoint",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "versionedArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    }
+  }
+}
