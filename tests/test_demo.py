@@ -34,6 +34,7 @@ from ubc_node.demo import (
     Phase5DemoResult,
     ProviderDemoReportModel,
     StagehandDemoBrowserFactory,
+    SupervisedDemoBrowserFactory,
     create_demo_report_model,
     run_phase5_demo,
 )
@@ -587,3 +588,89 @@ async def test_run_phase5_demo_wires_fixture_model_browser_and_chrome_path(
 
     assert result.evidence_count == 5
     assert seen["chrome_path"] == chrome.resolve()
+
+
+@pytest.mark.asyncio
+async def test_supervised_demo_factory_uses_disposable_visible_and_headless_workers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[tuple[BrowserSessionConfig, dict[str, object]]] = []
+    fake_browser = _FakeBrowser(redirect_guard=False, session=_SharedSession())
+
+    async def fake_launch(config: BrowserSessionConfig, **kwargs: object) -> _FakeBrowser:
+        seen.append((config, kwargs))
+        return fake_browser
+
+    monkeypatch.setattr(demo_module.SupervisedBrowserSession, "launch_local", fake_launch)
+    config = Phase5DemoConfig(tmp_path / "workspace", ORIGIN)
+    factory = SupervisedDemoBrowserFactory(config, chrome_path=tmp_path / "chrome")
+    assert await factory.create(persistent=False) is fake_browser
+    assert await factory.create(persistent=True) is fake_browser
+    assert seen[0][0].headless is True
+    assert seen[1][0].headless is False
+    assert seen[0][1]["takeover_enabled"] is False
+    assert seen[1][1]["takeover_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_phase5_demo_selects_supervised_runtime_and_validates_no_contact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, object] = {}
+
+    class StubFactory:
+        def __init__(self, config: object, **kwargs: object) -> None:
+            seen["config"] = config
+            seen.update(kwargs)
+
+    class StubDemo:
+        def __init__(self, config: Phase5DemoConfig, **_kwargs: object) -> None:
+            self.config = config
+
+        async def run(self) -> Phase5DemoResult:
+            return Phase5DemoResult(
+                self.config.workspace / "report.md",
+                self.config.workspace / "findings.json",
+                self.config.workspace / "events.jsonl",
+                5,
+            )
+
+    monkeypatch.setattr(demo_module, "SupervisedDemoBrowserFactory", StubFactory)
+    monkeypatch.setattr(demo_module, "Phase5Demo", StubDemo)
+    result = await run_phase5_demo(
+        workspace=tmp_path / "supervised",
+        provider_name="local",
+        browser_runtime="supervised",
+    )
+    assert result.evidence_count == 5
+    assert "profile_root" not in seen
+
+    with pytest.raises(ValueError, match="unsupported browser runtime"):
+        await run_phase5_demo(
+            workspace=tmp_path / "invalid",
+            provider_name="local",
+            browser_runtime="invalid",
+        )
+
+    class ContactedFixture:
+        origin = ORIGIN
+        outside_request_count = 1
+
+        def __enter__(self) -> "ContactedFixture":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    def contacted_fixture(_workspace: Path) -> ContactedFixture:
+        return ContactedFixture()
+
+    monkeypatch.setattr(demo_module, "_fixture_for_workspace", contacted_fixture)
+    with pytest.raises(DemoError, match="received a browser request"):
+        await run_phase5_demo(
+            workspace=tmp_path / "contacted",
+            provider_name="local",
+            browser_runtime="supervised",
+        )

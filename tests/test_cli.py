@@ -75,6 +75,8 @@ def test_demo_command_runs_and_reports_artifacts(
                 "http://localhost:1234/v1",
                 "--chrome-path",
                 str(tmp_path / "chrome"),
+                "--browser-runtime",
+                "supervised",
             ]
         )
         == 0
@@ -84,6 +86,7 @@ def test_demo_command_runs_and_reports_artifacts(
     assert "Captured evidence: 5" in output
     assert seen["provider_name"] == "openai"
     assert seen["model"] == "gpt-test"
+    assert seen["browser_runtime"] == "supervised"
 
 
 @pytest.mark.parametrize(

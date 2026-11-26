@@ -39,6 +39,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="OpenAI-compatible base URL, including for a locally hosted model.",
     )
     demo.add_argument("--chrome-path", type=Path, help="Optional Chrome/Chromium executable.")
+    demo.add_argument(
+        "--browser-runtime",
+        choices=("in-process", "supervised"),
+        default="in-process",
+        help="Browser isolation mode (default: in-process).",
+    )
     return parser
 
 
@@ -62,6 +68,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                     model=arguments.model,
                     base_url=arguments.base_url,
                     chrome_path=arguments.chrome_path,
+                    browser_runtime=arguments.browser_runtime,
                 )
             )
         except DemoCancelled as error:

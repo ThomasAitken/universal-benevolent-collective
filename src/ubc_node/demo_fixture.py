@@ -4,7 +4,7 @@ from contextlib import AbstractContextManager
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from secrets import token_urlsafe
-from threading import Thread
+from threading import Lock, Thread
 from typing import cast
 from urllib.parse import parse_qs, urlsplit
 
@@ -28,7 +28,24 @@ class _QuietHandler(BaseHTTPRequestHandler):
 
 class _OutsideHandler(_QuietHandler):
     def do_GET(self) -> None:
+        cast("_OutsideServer", self.server).record_request()
         self._html("<title>Outside scope</title><h1>This origin must be denied</h1>")
+
+
+class _OutsideServer(ThreadingHTTPServer):
+    def __init__(self, server_address: tuple[str, int]) -> None:
+        super().__init__(server_address, _OutsideHandler)
+        self._request_count = 0
+        self._request_lock = Lock()
+
+    @property
+    def request_count(self) -> int:
+        with self._request_lock:
+            return self._request_count
+
+    def record_request(self) -> None:
+        with self._request_lock:
+            self._request_count += 1
 
 
 class _ResearchServer(ThreadingHTTPServer):
@@ -142,7 +159,7 @@ class Phase5FixtureSite(AbstractContextManager["Phase5FixtureSite"]):
     """Run approved and deliberately unapproved sites on ephemeral loopback ports."""
 
     def __init__(self, *, research_port: int = 0, outside_port: int = 0) -> None:
-        self._outside = ThreadingHTTPServer(("127.0.0.1", outside_port), _OutsideHandler)
+        self._outside = _OutsideServer(("127.0.0.1", outside_port))
         self._research = _ResearchServer(("127.0.0.1", research_port), _ResearchHandler)
         self._research.fixture = self
         self._threads = (
@@ -162,6 +179,10 @@ class Phase5FixtureSite(AbstractContextManager["Phase5FixtureSite"]):
     @property
     def outside_origin(self) -> str:
         return self._origin(self._outside)
+
+    @property
+    def outside_request_count(self) -> int:
+        return self._outside.request_count
 
     def __enter__(self) -> "Phase5FixtureSite":
         for thread in self._threads:

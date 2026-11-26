@@ -7,7 +7,10 @@ import pytest
 
 from tests.browser_fixture import BrowserFixtureSite
 from ubc_node.browser_contracts import BrowserSessionConfig, BrowserSessionState
-from ubc_node.stagehand_browser import StagehandBrowserAdapter
+from ubc_node.contracts import JsonValue
+from ubc_node.demo_fixture import Phase5FixtureSite
+from ubc_node.stagehand_browser import NavigationPolicyError, StagehandBrowserAdapter
+from ubc_node.supervised_browser import SupervisedBrowserSession
 
 
 @pytest.mark.browser
@@ -46,3 +49,34 @@ async def test_real_stagehand_browser_against_local_fixture(tmp_path: Path) -> N
         finally:
             await adapter.close()
         assert adapter.state is BrowserSessionState.CLOSED
+
+
+@pytest.mark.browser
+@pytest.mark.asyncio
+async def test_real_supervised_browser_denies_before_outside_contact(tmp_path: Path) -> None:
+    if os.environ.get("UBC_RUN_BROWSER_E2E") != "1":
+        pytest.skip("set UBC_RUN_BROWSER_E2E=1 to run the real-browser smoke test")
+
+    chrome_value = os.environ.get("CHROME_PATH")
+    chrome_path = Path(chrome_value).resolve() if chrome_value else None
+    events: list[tuple[str, dict[str, JsonValue]]] = []
+    with Phase5FixtureSite() as fixture:
+        config = BrowserSessionConfig(
+            workspace=tmp_path / "supervised-workspace",
+            allowed_origins=frozenset({fixture.origin}),
+            headless=True,
+        )
+        browser = await SupervisedBrowserSession.launch_local(
+            config,
+            chrome_path=chrome_path,
+            event_sink=lambda kind, payload: events.append((kind, dict(payload))),
+        )
+        alpha = await browser.open_url(f"{fixture.origin}/source/alpha")
+        assert "12 hectares" in alpha.content
+        with pytest.raises(NavigationPolicyError):
+            await browser.open_url(f"{fixture.origin}/outside-redirect")
+        assert fixture.outside_request_count == 0
+        assert browser.state is BrowserSessionState.REVOKED
+    assert any(
+        kind == "egress_decided" and payload["decision"] == "deny" for kind, payload in events
+    )

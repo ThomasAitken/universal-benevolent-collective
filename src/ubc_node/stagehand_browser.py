@@ -208,21 +208,35 @@ class StagehandBrowserAdapter:
         handoff_handler: HandoffHandler | None = None,
         takeover_handler: TakeoverHandler | None = None,
         clipboard_clearer: ClipboardClearer | None = None,
+        proxy_server: str | None = None,
+        proxy_bypass: str | None = None,
+        temporary_profile_path: Path | None = None,
+        debugging_port: int | None = None,
     ) -> "StagehandBrowserAdapter":  # pragma: no cover - exercised by opt-in browser test
         """Launch the pinned Stagehand local browser with a policy-bound profile."""
         from stagehand import Stagehand, local_browser
 
-        profile_path = config.profile_path
+        if (
+            temporary_profile_path is not None
+            and config.profile_mode is not BrowserProfileMode.TEMPORARY
+        ):
+            raise BrowserContractError(
+                "an explicit temporary profile path requires temporary profile mode"
+            )
+        profile_path = config.profile_path or temporary_profile_path
         if profile_path is not None:
             profile_path.mkdir(parents=True, exist_ok=True, mode=0o700)
 
         browser = await local_browser.launch(
+            port=debugging_port,
             executable_path=chrome_path,
             user_data_dir=profile_path,
             preserve_user_data_dir=config.profile_mode is BrowserProfileMode.PERSISTENT,
             headless=config.headless,
             downloads_path=config.workspace / "downloads",
             accept_downloads=True,
+            proxy_server=proxy_server,
+            proxy_bypass=proxy_bypass,
         )
         try:
             stagehand = await Stagehand.create(

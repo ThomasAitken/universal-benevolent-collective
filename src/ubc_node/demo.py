@@ -20,10 +20,12 @@ from ubc_node.browser_contracts import (
     PersistencePolicyDecision,
     origin_for_url,
 )
+from ubc_node.browser_security import JsonlBoundaryAudit
 from ubc_node.contracts import ActionProposal, HumanHandoff, JsonValue, PolicyOutcome, TaskSpec
 from ubc_node.demo_fixture import Phase5FixtureSite
 from ubc_node.policy import PrototypePolicyConfig, PrototypePolicyEvaluator
 from ubc_node.stagehand_browser import NavigationPolicyError, StagehandBrowserAdapter
+from ubc_node.supervised_browser import SupervisedBrowserSession
 from ubc_node.takeover import CliTakeoverHandler, TakeoverHandler
 
 _DEMO_VERSION = 1
@@ -296,6 +298,34 @@ class StagehandDemoBrowserFactory:
             browser_config,
             chrome_path=self._chrome_path,
             takeover_handler=self._takeover if persistent else None,
+        )
+
+
+class SupervisedDemoBrowserFactory:
+    """Launch disposable Phase 6 browser workers behind an external egress gate."""
+
+    def __init__(
+        self,
+        config: Phase5DemoConfig,
+        *,
+        chrome_path: Path | None,
+    ) -> None:
+        self._config = config
+        self._chrome_path = chrome_path
+        self._audit = JsonlBoundaryAudit(config.workspace / "browser-boundary-events.jsonl")
+
+    async def create(self, *, persistent: bool) -> DemoBrowser:
+        workspace_name = "browser" if persistent else "redirect-browser"
+        browser_config = BrowserSessionConfig(
+            workspace=self._config.workspace / workspace_name,
+            allowed_origins=frozenset({self._config.origin}),
+            headless=not persistent,
+        )
+        return await SupervisedBrowserSession.launch_local(
+            browser_config,
+            chrome_path=self._chrome_path,
+            takeover_enabled=persistent,
+            event_sink=self._audit.append,
         )
 
 
@@ -732,6 +762,7 @@ async def run_phase5_demo(
     base_url: str | None = None,
     chrome_path: Path | None = None,
     cancellation: DemoCancellationToken | None = None,
+    browser_runtime: str = "in-process",
 ) -> Phase5DemoResult:
     """Run the complete fixture demonstration, resuming the supplied workspace."""
     resolved_workspace = workspace.resolve()
@@ -740,15 +771,27 @@ async def run_phase5_demo(
     with fixture:
         report_model = create_demo_report_model(provider_name, model=model, base_url=base_url)
         config = Phase5DemoConfig(resolved_workspace, fixture.origin)
-        browser_factory = StagehandDemoBrowserFactory(
-            config,
-            profile_root=resolved_workspace.parent / "browser-data",
-            chrome_path=chrome_path.resolve() if chrome_path is not None else None,
-        )
+        resolved_chrome = chrome_path.resolve() if chrome_path is not None else None
+        if browser_runtime == "in-process":
+            browser_factory: DemoBrowserFactory = StagehandDemoBrowserFactory(
+                config,
+                profile_root=resolved_workspace.parent / "browser-data",
+                chrome_path=resolved_chrome,
+            )
+        elif browser_runtime == "supervised":
+            browser_factory = SupervisedDemoBrowserFactory(
+                config,
+                chrome_path=resolved_chrome,
+            )
+        else:
+            raise ValueError(f"unsupported browser runtime: {browser_runtime}")
         demo = Phase5Demo(
             config,
             browser_factory=browser_factory,
             report_model=report_model,
             cancellation=cancellation,
         )
-        return await demo.run()
+        result = await demo.run()
+        if browser_runtime == "supervised" and fixture.outside_request_count != 0:
+            raise DemoError("denied fixture origin received a browser request")
+        return result
