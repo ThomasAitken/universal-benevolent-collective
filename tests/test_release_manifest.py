@@ -256,6 +256,6 @@ def test_browser_context_digest_tracks_nested_src_files_and_ignores_caches(
     )
 
 
-def test_checked_c01_manifest_matches_bound_inputs() -> None:
+def test_checked_manifest_matches_bound_inputs() -> None:
     manifest = load_release_manifest(_ROOT / "release/trusted-core-manifest.json")
     verify_release_manifest(_ROOT, manifest)

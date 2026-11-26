@@ -81,6 +81,7 @@ asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 markers = [
     "browser: requires an explicitly enabled local Chrome integration test",
+    "isolated_browser: requires the installed Linux systemd and Podman launcher",
 ]
 
 [tool.coverage.run]

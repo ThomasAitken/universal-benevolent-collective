@@ -192,7 +192,8 @@ browser plus CLI prompt; it does not yet provide an authenticated local web UI.
 
 ## Supervised browser and egress boundary
 
-`--browser-runtime supervised` uses three local domains:
+`--browser-runtime supervised` uses three local domains. For the Linux
+container boundary, see the [isolated browser fixture](trusted-core-and-isolation.md).
 
 ```text
 agent + policy + workflow
@@ -355,9 +356,8 @@ This remains a pre-alpha prototype. In particular:
   ephemeral loopback port but cannot prove that a connection came from the
   intended Chrome process. A same-user process could send its own allowed-origin
   traffic or create misleading egress events.
-- Proxy configuration does not force a fully compromised browser process to use
-  the proxy. Kernel-, container-, VM-, or separate-account enforcement is not
-  implemented.
+- In this demo, a compromised process can bypass the proxy. The separate
+  C02 Linux fixture disables external networking at the container boundary.
 - Supervised networking supports the local HTTP acceptance fixture, not general
   HTTPS or internet browsing.
 - Persistent profiles are not encrypted, and supervised mode deliberately

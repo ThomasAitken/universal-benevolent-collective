@@ -1,0 +1,18 @@
+[Unit]
+Description=UBC isolated browser connection
+CollectMode=inactive-or-failed
+
+[Service]
+EnvironmentFile=/etc/ubc-browser/release.env
+ExecStart=/usr/bin/python3 -I /usr/libexec/ubc-browser/broker.py run
+ExecStop=/usr/bin/python3 -I /usr/libexec/ubc-browser/broker.py cleanup
+ExecStopPost=/usr/bin/python3 -I /usr/libexec/ubc-browser/broker.py cleanup
+StandardInput=socket
+StandardOutput=journal
+StandardError=journal
+UMask=0077
+Delegate=yes
+DelegateSubgroup=broker
+KillMode=control-group
+RuntimeMaxSec=1800
+TimeoutStopSec=10

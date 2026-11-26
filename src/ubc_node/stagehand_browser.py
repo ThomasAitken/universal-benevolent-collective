@@ -212,6 +212,8 @@ class StagehandBrowserAdapter:
         proxy_bypass: str | None = None,
         temporary_profile_path: Path | None = None,
         debugging_port: int | None = None,
+        chromium_sandbox: bool | None = None,
+        accept_downloads: bool = True,
     ) -> "StagehandBrowserAdapter":  # pragma: no cover - exercised by opt-in browser test
         """Launch the pinned Stagehand local browser with a policy-bound profile."""
         from stagehand import Stagehand, local_browser
@@ -234,7 +236,8 @@ class StagehandBrowserAdapter:
             preserve_user_data_dir=config.profile_mode is BrowserProfileMode.PERSISTENT,
             headless=config.headless,
             downloads_path=config.workspace / "downloads",
-            accept_downloads=True,
+            accept_downloads=accept_downloads,
+            chromium_sandbox=chromium_sandbox,
             proxy_server=proxy_server,
             proxy_bypass=proxy_bypass,
         )

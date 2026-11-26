@@ -1,0 +1,15 @@
+[Unit]
+Description=UBC isolated browser launcher
+
+[Socket]
+ListenStream=/run/ubc-browser/control.sock
+Accept=yes
+SocketUser=root
+SocketGroup=ubc-node
+SocketMode=0660
+DirectoryMode=0755
+MaxConnections=4
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

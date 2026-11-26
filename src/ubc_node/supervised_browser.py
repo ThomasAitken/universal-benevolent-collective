@@ -9,7 +9,8 @@ import socket
 import struct
 import subprocess
 import sys
-from collections.abc import Awaitable, Mapping
+from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict
 from pathlib import Path
 from typing import Protocol, cast
@@ -43,7 +44,7 @@ from ubc_node.stagehand_browser import (
 )
 from ubc_node.takeover import CliTakeoverHandler
 
-_PROTOCOL_VERSION = 1
+WORKER_PROTOCOL_VERSION = 1
 _MAX_MESSAGE_BYTES = 1024 * 1024
 _PROCESS_EXIT_TIMEOUT_SECONDS = 5.0
 
@@ -125,7 +126,7 @@ class TemporaryProfileManager:
         return True
 
 
-async def _read_frame(reader: asyncio.StreamReader) -> Mapping[str, object]:
+async def read_worker_frame(reader: asyncio.StreamReader) -> Mapping[str, object]:
     prefix = await reader.readexactly(4)
     length = struct.unpack("!I", prefix)[0]
     if length < 2 or length > _MAX_MESSAGE_BYTES:
@@ -133,14 +134,14 @@ async def _read_frame(reader: asyncio.StreamReader) -> Mapping[str, object]:
     payload = await reader.readexactly(length)
     try:
         value = json.loads(payload)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (UnicodeDecodeError, ValueError, RecursionError) as error:
         raise BrowserWorkerError("worker message is not valid JSON") from error
     if not isinstance(value, dict):
         raise BrowserWorkerError("worker message must be an object")
     return cast(Mapping[str, object], value)
 
 
-async def _write_frame(writer: asyncio.StreamWriter, value: Mapping[str, object]) -> None:
+async def write_worker_frame(writer: asyncio.StreamWriter, value: Mapping[str, object]) -> None:
     payload = json.dumps(value, allow_nan=False, separators=(",", ":")).encode()
     if len(payload) > _MAX_MESSAGE_BYTES:
         raise BrowserWorkerError("worker message exceeds the protocol limit")
@@ -154,14 +155,14 @@ class BrowserWorkerService:
     def __init__(self, browser: _WorkerBrowser, lease: SessionLease) -> None:
         self._browser = browser
         self._lease = lease
-        self._seen_ids: set[int] = set()
+        self._last_request_id = 0
 
     async def serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
             while True:
                 try:
                     request = await asyncio.wait_for(
-                        _read_frame(reader), timeout=self._lease.remaining_seconds
+                        read_worker_frame(reader), timeout=self._lease.remaining_seconds
                     )
                 except TimeoutError:
                     await self._browser.revoke()
@@ -184,13 +185,16 @@ class BrowserWorkerService:
     async def _handle(self, request: Mapping[str, object], writer: asyncio.StreamWriter) -> bool:
         request_id = request.get("request_id")
         try:
-            if request.get("version") != _PROTOCOL_VERSION:
+            if (
+                type(request.get("version")) is not int
+                or request["version"] != WORKER_PROTOCOL_VERSION
+            ):
                 raise BrowserWorkerError("unsupported worker protocol version")
             if not isinstance(request_id, int) or isinstance(request_id, bool) or request_id < 1:
                 raise BrowserWorkerError("request_id must be a positive integer")
-            if request_id in self._seen_ids:
-                raise BrowserWorkerError("duplicate request_id")
-            self._seen_ids.add(request_id)
+            if request_id <= self._last_request_id:
+                raise BrowserWorkerError("duplicate or out-of-order request_id")
+            self._last_request_id = request_id
             operation = request.get("operation")
             parameters = request.get("parameters", {})
             if not isinstance(operation, str) or not operation:
@@ -204,10 +208,10 @@ class BrowserWorkerService:
             result = await self._with_expiry(
                 self._dispatch(operation, cast(Mapping[str, object], parameters))
             )
-            await _write_frame(
+            await write_worker_frame(
                 writer,
                 {
-                    "version": _PROTOCOL_VERSION,
+                    "version": WORKER_PROTOCOL_VERSION,
                     "request_id": request_id,
                     "ok": True,
                     "result": dict(result),
@@ -216,10 +220,10 @@ class BrowserWorkerService:
             return operation in {"close", "revoke"}
         except Exception as error:
             if isinstance(request_id, int) and not isinstance(request_id, bool):
-                await _write_frame(
+                await write_worker_frame(
                     writer,
                     {
-                        "version": _PROTOCOL_VERSION,
+                        "version": WORKER_PROTOCOL_VERSION,
                         "request_id": request_id,
                         "ok": False,
                         "error_type": type(error).__name__,
@@ -288,8 +292,8 @@ class BrowserWorkerService:
         proposal = ActionProposal.browser(
             f"Supervised browser {operation}",
             {
-                "operation": operation,
                 **json_parameters,
+                "operation": operation,
             },
         )
         return await self._browser.execute(proposal)
@@ -302,7 +306,108 @@ class BrowserWorkerService:
         return value
 
 
-class SupervisedBrowserSession:
+class BrowserWorkerClient(ABC):
+    """Shared typed client for transports serving the browser worker protocol."""
+
+    @abstractmethod
+    async def _request(
+        self, operation: str, parameters: Mapping[str, JsonValue] | None = None
+    ) -> Mapping[str, JsonValue]: ...
+
+    def _decode_result[T](
+        self,
+        parse: Callable[[Mapping[str, JsonValue]], T],
+        result: Mapping[str, JsonValue],
+    ) -> T:
+        return parse(result)
+
+    async def _call[T](
+        self,
+        operation: str,
+        parse: Callable[[Mapping[str, JsonValue]], T],
+        parameters: Mapping[str, JsonValue] | None = None,
+    ) -> T:
+        return self._decode_result(parse, await self._request(operation, parameters))
+
+    async def open_url(self, url: str) -> PageInspection:
+        return await self._call("open", _inspection, {"url": url})
+
+    async def inspect(self) -> PageInspection:
+        return await self._call("inspect", _inspection)
+
+    async def screenshot(self, *, full_page: bool = False) -> ArtifactRef:
+        return await self._call("screenshot", _artifact, {"full_page": full_page})
+
+    async def observe(self, instruction: str) -> tuple[InteractionCandidate, ...]:
+        return await self._call("observe", _candidates, {"instruction": instruction})
+
+    async def click(self, candidate_id: str) -> PageInspection:
+        return await self._call("click", _inspection, {"candidate_id": candidate_id})
+
+    async def fill(self, candidate_id: str, value: str) -> PageInspection:
+        return await self._call("fill", _inspection, {"candidate_id": candidate_id, "value": value})
+
+    async def extract(self, instruction: str, schema: ExtractionSchema) -> ExtractionResult:
+        fields: list[dict[str, JsonValue]] = [
+            {"name": field.name, "type": field.type.value, "required": field.required}
+            for field in schema.fields
+        ]
+        return await self._call(
+            "extract",
+            _extraction,
+            {"instruction": instruction, "schema": cast(JsonValue, fields)},
+        )
+
+    async def list_tabs(self) -> tuple[TabInfo, ...]:
+        return await self._call("tabs", _tabs)
+
+    async def new_tab(self, url: str) -> TabInfo:
+        return await self._call("new_tab", _tab, {"url": url})
+
+    async def switch_tab(self, tab_id: str) -> TabInfo:
+        return await self._call("switch_tab", _tab, {"tab_id": tab_id})
+
+    async def close_tab(self, tab_id: str) -> None:
+        await self._request("close_tab", {"tab_id": tab_id})
+
+    async def download(self, candidate_id: str, *, timeout_seconds: float = 10) -> ArtifactRef:
+        return await self._call(
+            "download",
+            _artifact,
+            {"candidate_id": candidate_id, "timeout_seconds": timeout_seconds},
+        )
+
+    async def handoff(self, request: HumanHandoff) -> Mapping[str, JsonValue]:
+        return await self._request("handoff", _handoff_parameters(request))
+
+    async def handoff_for_task(
+        self, task: TaskSpec, request: HumanHandoff
+    ) -> Mapping[str, JsonValue]:
+        return await self._request(
+            "handoff_for_task",
+            {
+                **_handoff_parameters(request),
+                "task_id": task.task_id,
+                "task_objective": task.objective,
+            },
+        )
+
+    async def observe_state(self) -> Mapping[str, JsonValue]:
+        return await self._request("observe_state")
+
+    async def execute(self, proposal: ActionProposal) -> Mapping[str, JsonValue]:
+        if proposal.kind is not ActionKind.BROWSER:
+            raise BrowserContractError("browser runtime only accepts browser proposals")
+        operation = proposal.parameters.get("operation")
+        if not isinstance(operation, str):
+            raise BrowserContractError("operation must be a string")
+        return await self._request(
+            operation,
+            {key: value for key, value in proposal.parameters.items() if key != "operation"},
+        )
+
+
+class SupervisedBrowserSession(BrowserWorkerClient):
     """Parent-side typed browser capability backed by a dedicated worker process."""
 
     def __init__(
@@ -358,10 +463,10 @@ class SupervisedBrowserSession:
             process = await asyncio.to_thread(_spawn_worker, child_socket.fileno())
             child_socket.close()
             reader, writer = await asyncio.open_connection(sock=parent_socket)
-            await _write_frame(
+            await write_worker_frame(
                 writer,
                 {
-                    "version": _PROTOCOL_VERSION,
+                    "version": WORKER_PROTOCOL_VERSION,
                     "session_id": session_id,
                     "config": _config_record(config),
                     "lease": asdict(lease_settings),
@@ -370,7 +475,7 @@ class SupervisedBrowserSession:
                     "takeover_enabled": takeover_enabled,
                 },
             )
-            ready = await asyncio.wait_for(_read_frame(reader), timeout=60)
+            ready = await asyncio.wait_for(read_worker_frame(reader), timeout=60)
             if ready.get("status") != "ready":
                 raise BrowserWorkerError(str(ready.get("error", "browser worker failed to start")))
             event_sink("browser_worker_started", {"session_id": session_id, "pid": process.pid})
@@ -407,77 +512,6 @@ class SupervisedBrowserSession:
     def state(self) -> BrowserSessionState:
         return self._state
 
-    async def open_url(self, url: str) -> PageInspection:
-        return _inspection(await self._request("open", {"url": url}))
-
-    async def inspect(self) -> PageInspection:
-        return _inspection(await self._request("inspect"))
-
-    async def screenshot(self, *, full_page: bool = False) -> ArtifactRef:
-        return _artifact(await self._request("screenshot", {"full_page": full_page}))
-
-    async def observe(self, instruction: str) -> tuple[InteractionCandidate, ...]:
-        result = await self._request("observe", {"instruction": instruction})
-        values = result.get("candidates")
-        if not isinstance(values, list):
-            raise BrowserWorkerError("worker returned invalid interaction candidates")
-        candidates: list[InteractionCandidate] = []
-        for value in values:
-            if not isinstance(value, dict):
-                raise BrowserWorkerError("worker returned an invalid interaction candidate")
-            candidates.append(
-                InteractionCandidate(
-                    _record_string(value, "candidate_id"),
-                    _record_string(value, "description"),
-                    InteractionKind(_record_string(value, "kind")),
-                )
-            )
-        return tuple(candidates)
-
-    async def click(self, candidate_id: str) -> PageInspection:
-        return _inspection(await self._request("click", {"candidate_id": candidate_id}))
-
-    async def fill(self, candidate_id: str, value: str) -> PageInspection:
-        return _inspection(
-            await self._request("fill", {"candidate_id": candidate_id, "value": value})
-        )
-
-    async def extract(self, instruction: str, schema: ExtractionSchema) -> ExtractionResult:
-        fields: list[dict[str, JsonValue]] = [
-            {"name": field.name, "type": field.type.value, "required": field.required}
-            for field in schema.fields
-        ]
-        result = await self._request(
-            "extract", {"instruction": instruction, "schema": cast(JsonValue, fields)}
-        )
-        data = result.get("data")
-        if not isinstance(data, dict):
-            raise BrowserWorkerError("worker returned invalid extraction data")
-        return ExtractionResult(cast(Mapping[str, JsonValue], data))
-
-    async def list_tabs(self) -> tuple[TabInfo, ...]:
-        result = await self._request("tabs")
-        values = result.get("tabs")
-        if not isinstance(values, list):
-            raise BrowserWorkerError("worker returned invalid tab data")
-        return tuple(_tab(value) for value in values)
-
-    async def new_tab(self, url: str) -> TabInfo:
-        return _tab(await self._request("new_tab", {"url": url}))
-
-    async def switch_tab(self, tab_id: str) -> TabInfo:
-        return _tab(await self._request("switch_tab", {"tab_id": tab_id}))
-
-    async def close_tab(self, tab_id: str) -> None:
-        await self._request("close_tab", {"tab_id": tab_id})
-
-    async def download(self, candidate_id: str, *, timeout_seconds: float = 10) -> ArtifactRef:
-        return _artifact(
-            await self._request(
-                "download", {"candidate_id": candidate_id, "timeout_seconds": timeout_seconds}
-            )
-        )
-
     async def pause(self) -> None:
         await self._request("pause")
         self._state = BrowserSessionState.PAUSED
@@ -513,35 +547,6 @@ class SupervisedBrowserSession:
                 )
             await self._finish("browser_worker_exited", "revoked")
 
-    async def handoff(self, request: HumanHandoff) -> Mapping[str, JsonValue]:
-        return await self._request("handoff", _handoff_parameters(request))
-
-    async def handoff_for_task(
-        self, task: TaskSpec, request: HumanHandoff
-    ) -> Mapping[str, JsonValue]:
-        return await self._request(
-            "handoff_for_task",
-            {
-                **_handoff_parameters(request),
-                "task_id": task.task_id,
-                "task_objective": task.objective,
-            },
-        )
-
-    async def observe_state(self) -> Mapping[str, JsonValue]:
-        return await self._request("observe_state")
-
-    async def execute(self, proposal: ActionProposal) -> Mapping[str, JsonValue]:
-        if proposal.kind is not ActionKind.BROWSER:
-            raise BrowserContractError("browser runtime only accepts browser proposals")
-        operation = proposal.parameters.get("operation")
-        if not isinstance(operation, str):
-            raise BrowserContractError("operation must be a string")
-        return await self._request(
-            operation,
-            {key: value for key, value in proposal.parameters.items() if key != "operation"},
-        )
-
     async def _request(
         self,
         operation: str,
@@ -571,17 +576,17 @@ class SupervisedBrowserSession:
                 await self._finish("browser_worker_exited", "unexpected exit")
                 raise BrowserWorkerError("browser worker exited unexpectedly")
             self._request_id += 1
-            await _write_frame(
+            await write_worker_frame(
                 self._writer,
                 {
-                    "version": _PROTOCOL_VERSION,
+                    "version": WORKER_PROTOCOL_VERSION,
                     "request_id": self._request_id,
                     "operation": operation,
                     "parameters": dict(parameters or {}),
                 },
             )
             try:
-                response = await _read_frame(self._reader)
+                response = await read_worker_frame(self._reader)
             except (asyncio.IncompleteReadError, ConnectionError) as error:
                 await self._finish("browser_worker_exited", "control channel closed")
                 raise BrowserWorkerError("browser worker control channel closed") from error
@@ -702,7 +707,7 @@ def _config_from_record(value: object) -> BrowserSessionConfig:
     )
 
 
-def _available_loopback_port() -> int:
+def available_loopback_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as candidate:
         candidate.bind(("127.0.0.1", 0))
         return cast(tuple[str, int], candidate.getsockname())[1]
@@ -714,8 +719,8 @@ async def _worker(fd: int) -> None:  # pragma: no cover - exercised by opt-in Ch
     profile_path: Path | None = None
     browser: StagehandBrowserAdapter | None = None
     try:
-        init = await _read_frame(reader)
-        if init.get("version") != _PROTOCOL_VERSION:
+        init = await read_worker_frame(reader)
+        if init.get("version") != WORKER_PROTOCOL_VERSION:
             raise BrowserWorkerError("unsupported worker protocol version")
         session_id = _record_string(init, "session_id")
         config = _config_from_record(init.get("config"))
@@ -736,7 +741,7 @@ async def _worker(fd: int) -> None:  # pragma: no cover - exercised by opt-in Ch
         chrome_value = init.get("chrome_path")
         if chrome_value is not None and not isinstance(chrome_value, str):
             raise BrowserWorkerError("chrome_path must be a string or null")
-        debugging_port = _available_loopback_port()
+        debugging_port = available_loopback_port()
         browser = await StagehandBrowserAdapter.launch_local(
             config,
             chrome_path=Path(chrome_value) if isinstance(chrome_value, str) else None,
@@ -750,16 +755,16 @@ async def _worker(fd: int) -> None:  # pragma: no cover - exercised by opt-in Ch
             temporary_profile_path=profile_path,
             debugging_port=debugging_port,
         )
-        await _write_frame(writer, {"version": _PROTOCOL_VERSION, "status": "ready"})
+        await write_worker_frame(writer, {"version": WORKER_PROTOCOL_VERSION, "status": "ready"})
         await BrowserWorkerService(browser, lease).serve(reader, writer)
     except Exception as error:
         if browser is not None:
             await browser.revoke()
         if not writer.is_closing():
-            await _write_frame(
+            await write_worker_frame(
                 writer,
                 {
-                    "version": _PROTOCOL_VERSION,
+                    "version": WORKER_PROTOCOL_VERSION,
                     "status": "failed",
                     "error": f"{type(error).__name__}: {error}",
                 },
@@ -808,6 +813,38 @@ def _inspection(value: Mapping[str, JsonValue]) -> PageInspection:
         _record_boolean(cast(Mapping[str, object], value), "content_truncated"),
         _record_boolean(cast(Mapping[str, object], value), "untrusted"),
     )
+
+
+def _candidates(result: Mapping[str, JsonValue]) -> tuple[InteractionCandidate, ...]:
+    values = result.get("candidates")
+    if not isinstance(values, list):
+        raise BrowserWorkerError("worker returned invalid interaction candidates")
+    candidates: list[InteractionCandidate] = []
+    for value in values:
+        if not isinstance(value, dict):
+            raise BrowserWorkerError("worker returned an invalid interaction candidate")
+        candidates.append(
+            InteractionCandidate(
+                _record_string(value, "candidate_id"),
+                _record_string(value, "description"),
+                InteractionKind(_record_string(value, "kind")),
+            )
+        )
+    return tuple(candidates)
+
+
+def _extraction(result: Mapping[str, JsonValue]) -> ExtractionResult:
+    data = result.get("data")
+    if not isinstance(data, dict):
+        raise BrowserWorkerError("worker returned invalid extraction data")
+    return ExtractionResult(cast(Mapping[str, JsonValue], data))
+
+
+def _tabs(result: Mapping[str, JsonValue]) -> tuple[TabInfo, ...]:
+    values = result.get("tabs")
+    if not isinstance(values, list):
+        raise BrowserWorkerError("worker returned invalid tab data")
+    return tuple(_tab(value) for value in values)
 
 
 def _artifact(value: Mapping[str, JsonValue]) -> ArtifactRef:

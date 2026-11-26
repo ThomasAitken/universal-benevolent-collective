@@ -3,7 +3,7 @@
 **Document status:** Active living work tracker  
 **Delivery model:** Direct, ordered commits to `main`  
 **Last updated:** 2026-11-26  
-**Current focus:** C02 — enforced browser security boundary  
+**Current focus:** C03 — authenticated proxy-only HTTP/HTTPS egress  
 **Pilot gate:** One dedicated, low-value project account after C01–C08 pass
 
 This roadmap turns the implemented
@@ -13,10 +13,9 @@ evidence gates. No real account is introduced until browser isolation,
 artifact handling, session control, and action recovery have passed their
 gates.
 
-The immediate next task is the isolated browser runtime. It closes the largest
-current gap: the supervised worker and proxy constrain normal model-driven
-behavior, but they do not yet withstand a compromised browser or another
-malicious process running as the same host user.
+C02 implements the isolated browser runtime and its acceptance gate. The
+prototype's supervised worker and proxy remain available for development. The
+isolated runtime is offline until C03 adds the separate egress boundary.
 
 This boundary also protects node integrity. Web content and Chromium are
 high-exposure inputs; compromising them must not let an attacker replace the
@@ -52,7 +51,7 @@ reflects the resulting behavior and any residual limitation.
 | Unit | Commit | Status | Depends on | Result |
 |---|---|---|---|---|
 | SNP-01 | C01 | done | Prototype baseline | Verified trusted-core manifest, pinned non-root browser image, isolation contracts, and fixture topology |
-| SNP-02 | C02 | queued | C01 | Chromium and worker execute inside an OS-enforced security boundary |
+| SNP-02 | C02 | done | C01 | Offline Chromium isolation implemented and verified via Linux guest acceptance |
 | SNP-03 | C03 | queued | C02 | Authenticated proxy-only HTTP/HTTPS egress with controlled DNS and bypass resistance |
 | SNP-04 | C04 | queued | C01 | Downloads remain quarantined until deterministic scanning and promotion |
 | SNP-05 | C05 | queued | C02 | Encrypted, registered, expiring, and revocable project browser profiles |
@@ -91,8 +90,20 @@ lanes that follow.
   bounded control transport;
 - make parent, worker, runtime, and control-channel loss terminal and
   restart-safe;
-- retain the existing typed `BrowserSession` API and real-browser acceptance
-  scenario.
+- retain the typed `BrowserSession` API and run the approved-page and denied-redirect
+  scenario in isolated Chromium.
+
+C02 runs only the bundled fixture in a disconnected network namespace. Its
+control connection uses a root-owned Linux Unix socket and a dedicated
+container connection with no published ports. C03 adds the external network
+path. Artifact export, model-assisted browser calls, persistent profiles, and
+takeover stay disabled until their prerequisites are available.
+
+The [installation and acceptance procedure](trusted-core-and-isolation.md#c02-acceptance)
+passed in a disposable Linux rehearsal under Docker Desktop as both the node
+user and the root test operator. `task check` passed at 100% statement and
+branch coverage. A Linux guest running the intended systemd, Podman, crun, and
+Chromium stack is sufficient for C02 acceptance.
 
 ### C03 — `feat(egress): enforce authenticated proxy-only HTTP and HTTPS`
 
@@ -269,6 +280,12 @@ policy evaluator, audit writer, release metadata, or node identity keys.
   other platforms marked unsupported rather than silently weakened.
 
 ### Gate
+
+Run the integrated gate on the intended pilot deployment before using a real
+account. A Linux VM is suitable when its host and management plane are under
+trusted administration. Verify that the ordinary node and model-facing
+processes lack engine, host management, and browser runtime access beyond their
+assigned capabilities.
 
 - approved HTTP and HTTPS fixtures work through the gate;
 - denied redirect, direct socket, alternate DNS, QUIC, and proxy-bypass tests

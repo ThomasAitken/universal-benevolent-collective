@@ -2,29 +2,29 @@
 
 ## Decision and scope
 
-C01 defines contracts and build inputs; it does not claim that the current
-prototype is isolated. C02 must replace the inherited host process with the
-backend below before an isolated runtime is available.
+C02 adds an offline browser runtime for Linux with cgroup v2, systemd 254 or
+later, local Podman 5.4 or later, and crun. A root-owned systemd socket starts
+one broker and one disposable container per connection. Only the broker uses
+rootful Podman. The worker and Chromium run as UID/GID 65532 (`ubc-browser`)
+inside a private user namespace mapped to subordinate host IDs. This uses the
+backend recorded in the C01 manifest while keeping runtime storage and engine
+authority outside the ordinary node account.
 
-The primary pilot backend is a root-managed Podman service on Linux, with the
-browser container owned by a dedicated `ubc-browser` service account. The
-ordinary node account has neither the Podman socket nor permission to enter the
-browser account's runtime directories. The service launches the pinned image,
-drops all Linux capabilities, applies cgroup limits, uses a read-only root
-filesystem, and provisions only the named runtime, profile, and quarantine
-writable areas. C02 will implement and test those launch properties.
+The `ubc-node` group can open the launcher socket. Keep model processes outside
+that group and keep the node account outside any container-engine or
+administrative group. Processes sharing the node UID can ask for a new
+container. Each accepted connection is distinct and cannot attach to an
+existing container by supplying its session ID or discovering the socket path.
+This isolation model assumes a trusted node process, host root, and kernel.
+Host-level inspection or control of the trusted node process is outside this
+boundary.
 
-Native macOS and Windows, Docker Desktop, a rootless container owned by the
-ordinary node user, and the existing child-process runtime are development
-fixtures only. They are unsupported for the pilot security gate: each leaves a
-same-user or desktop-VM administrator able to inspect or interfere with the
-browser. There is no automatic fallback from the supported backend to one of
-these weaker modes.
-
-This choice is deliberately narrower than “any OCI runtime.” The trust claim
-depends on who controls the runtime socket and service account, not just on
-container namespaces. A lightweight VM remains a valid future backend, but it
-must implement the same contracts and pass the same gate before use.
+Native macOS and Windows, Docker Desktop, and the existing local in-process
+and supervised browser demos remain development fixtures. A disposable Linux
+guest running the specified stack can supply C02 acceptance evidence. Run
+the integrated Milestone A gate on the intended Linux pilot deployment to
+verify its authority and network configuration. Linux launch failures are
+terminal and there is no fallback to the development modes.
 
 ## Trusted core
 
@@ -49,55 +49,118 @@ browser runtime receives no node-key object and no core audit sink. Browser
 boundary events are untrusted facts consumed and wrapped by the trusted audit
 writer; they are not direct writes to the core journal.
 
-## Browser build and filesystem contract
+## Build and install the C02 fixture
 
-Build from the repository root:
+Use a disposable Linux test host. With a Docker build host and rootful Podman
+available on the test host, build and load the same named OCI image:
 
 ```shell
-docker build --file browser-runtime/Dockerfile --tag ubc-browser:local .
+docker build --file browser-runtime/Dockerfile --tag localhost/ubc-browser:c02 .
+image=$(docker image inspect localhost/ubc-browser:c02 --format '{{index .RepoDigests 0}}')
+docker save localhost/ubc-browser:c02 | sudo podman load
 ```
 
-After publishing or loading the image, create a manifest from its immutable
-OCI digest (never from a mutable tag):
+Use the digest reported by the build in both the manifest and the systemd
+release configuration. For an architecture-specific local build, generate a
+local manifest from the current source tree:
 
 ```shell
+mkdir -p .ubc
 uv run ubc release-manifest \
-  --release-id 0.1.0-c01 \
+  --release-id 0.1.0-c02 \
   --constitution-version 0.1-draft \
   --browser-image-reference localhost/ubc-browser \
-  --browser-image-digest sha256:<64 lowercase hex characters> \
-  --output release/trusted-core-manifest.json
+  --browser-image-digest "${image##*@}" \
+  --output .ubc/c02-manifest.json
 ```
 
-The build pins the Python and `uv` base images by multi-platform OCI digest,
-uses a dated Debian snapshot, pins Chromium, installs Python dependencies from
-`uv.lock`, and runs as UID/GID 65532. The image exposes no port and contains no
-host path. C02 must launch it with no container socket and with these
-boundary-local writable areas only:
+Reserve non-overlapping subordinate ranges in `/etc/subuid` and `/etc/subgid`
+for Podman's rootful `containers` allocator. The socket permits four concurrent
+connections and each uses 65,536 UID and GID slots. Confirm the local image
+resolves by digest with `sudo podman image inspect localhost/ubc-browser@sha256:…`.
+[Podman run reference](https://docs.podman.io/en/v5.4.2/markdown/podman-run.1.html)
 
-| Area | In-boundary location | Purpose |
-|---|---|---|
-| `runtime` | `/run/ubc` | authenticated channel material and ephemeral state |
-| `profile` | `/var/lib/ubc/profile` | isolated Chromium profile |
-| `quarantine` | `/var/lib/ubc/quarantine` | untrusted downloads awaiting C04 |
+Create the `ubc-node` group and add the ordinary node account. Start a fresh
+login after changing group membership. Install the launcher and units as root:
 
-The browser must not mount node source, executable policy, constitution,
-release metadata, node-key storage, core audit storage, task workspaces, or a
-container-engine socket. Released task artifacts will cross the boundary by
-content digest only after C04 scanning.
+```shell
+sudo install -D -m 0644 browser-runtime/broker.py /usr/libexec/ubc-browser/broker.py
+sudo install -m 0644 browser-runtime/ubc-browser.socket /etc/systemd/system/
+sudo install -m 0644 browser-runtime/ubc-browser@.service /etc/systemd/system/
+sudo install -d -m 0755 /etc/ubc-browser
+```
 
-## Channel and fixture topology
+Set these values in root-owned `/etc/ubc-browser/release.env` using the values
+from the loaded image and manifest:
 
-`IsolatedBrowserLaunchSpec` contains an immutable image digest, normalized
-origins, resource limits, named writable areas, and opaque control/egress
-channel capabilities. It contains no host path or endpoint. The raw Chromium
-debug endpoint remains entirely inside the browser security boundary.
+```ini
+UBC_BROWSER_IMAGE=localhost/ubc-browser@sha256:<64 lowercase hex characters>
+UBC_BROWSER_RELEASE=0.1.0-c02
+```
 
-The machine-readable [fixture topology](../browser-runtime/fixture-topology.json)
-defines three isolated networks. The browser shares `control` only with the
-trusted node boundary and `egress` only with the gate. Fixtures are reachable
-only from the gate. No browser port is published to the host. C03 will make
-that topology executable and prove bypass resistance.
+Keep the launcher, unit files, and release configuration writable only by
+root. Use standard Podman seccomp and keep the Podman API socket disabled.
+Activate the launcher with `sudo systemctl daemon-reload` followed by
+`sudo systemctl enable --now ubc-browser.socket`.
+[systemd socket reference](https://www.freedesktop.org/software/systemd/man/latest/systemd.socket.html)
 
-Human takeover is disabled in the isolated launch contract until C06 provides
-an authenticated same-session surface.
+## Runtime contract
+
+The image uses pinned base images, a dated Debian snapshot, pinned Chromium,
+and Python dependencies from `uv.lock`. The launcher supplies a read-only
+root filesystem, a private network and PID namespace, dropped capabilities,
+and `no-new-privileges`. Cgroups enforce a 1 GiB memory limit with swap
+disabled, one CPU, and 256 processes. Podman and systemd enforce a 30-minute
+lifetime. The worker uses three private tmpfs mounts:
+
+| Area | In-boundary location | Size |
+|---|---|---:|
+| Runtime | `/run/ubc` | 128 MiB |
+| Profile | `/var/lib/ubc/profile` | 256 MiB |
+| Quarantine | `/var/lib/ubc/quarantine` | 64 MiB |
+
+The browser receives no node source mount, node keys, task workspace, core
+audit storage, or container-engine socket. Chromium's debugger listens only
+within the disconnected network namespace. C02 disables Chromium's internal
+sandbox to run with the OCI restrictions and treats Chromium and the worker
+as one trust domain. The containment claim rests on Linux and the container
+configuration.
+
+The node verifies its local release manifest and the socket's root peer
+credentials. The broker uses the digest configured by the administrator and
+does not interpret client messages as runtime arguments. A connected
+descriptor passed with Podman and crun carries the existing versioned,
+length-prefixed browser protocol. There is no browser port or reattach
+endpoint. Commands are sequential and bounded to 1 MiB per message. Startup
+has a 60-second deadline and a command has a 30-second deadline. Loss of the
+parent connection, worker, or broker retires the container and its tmpfs
+state. A failed command is terminal and the client never reconnects or
+replays it. Lifecycle events include the release and image digest.
+
+`PodmanBrowserRuntime.launch` returns the typed `BrowserSession`. C02
+accepts only the bundled fixture origin and fixed launch limits. Its loopback
+HTTP proxy exercises an approved page and a denied redirect using the
+existing research fixture. The zero-contact check for that redirect is a
+normal-browser fixture assertion. C03 will put the egress gate in its own
+boundary and evaluate bypass resistance against a compromised worker.
+
+Model-assisted operations, screenshots and downloads crossing into the task
+workspace, persistent profiles, takeover, and external network access
+remain disabled. The [fixture topology](../browser-runtime/fixture-topology.json)
+describes the three networks planned for C03.
+
+## C02 acceptance
+
+As the ordinary node user on the test host, run:
+
+```shell
+UBC_ISOLATION_MANIFEST=.ubc/c02-manifest.json task test-browser-isolation
+```
+
+As a separate root operator on the same disposable host, run the same gate
+with `UBC_RUN_ISOLATION_ADMIN=1` to also inspect runtime limits, test node
+file and network separation from inside the container, and kill the worker,
+Podman process, broker, and parent separately. Run with no other isolated
+browser sessions.
+Use the checked release manifest by omitting `UBC_ISOLATION_MANIFEST` when it
+matches the installed image.

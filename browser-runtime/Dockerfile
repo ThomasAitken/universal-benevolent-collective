@@ -40,7 +40,5 @@ RUN uv sync --frozen --no-dev \
 
 USER 65532:65532
 
-# C02 supplies a private inherited control channel and mounts exactly the
-# boundary-local writable areas. No port is exposed and no host path is baked
-# into the image.
-ENTRYPOINT ["python", "-m", "ubc_node.supervised_browser"]
+# The Linux launcher passes one connected control descriptor and no host mounts.
+ENTRYPOINT ["python", "-m", "ubc_node.isolated_worker"]

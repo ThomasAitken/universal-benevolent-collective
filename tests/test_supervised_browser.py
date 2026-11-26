@@ -38,20 +38,20 @@ from ubc_node.supervised_browser import (
     SupervisedBrowserSession,
     TemporaryProfileManager,
     _artifact,
-    _available_loopback_port,
     _config_from_record,
     _config_record,
     _handoff_parameters,
     _inspection,
     _parse_worker_fd,
-    _read_frame,
     _record_boolean,
     _record_integer,
     _record_number,
     _record_string,
     _spawn_worker,
     _tab,
-    _write_frame,
+    available_loopback_port,
+    read_worker_frame,
+    write_worker_frame,
 )
 
 
@@ -426,7 +426,7 @@ async def test_worker_service_expires_slow_operation_and_revokes_on_channel_end(
             worker_reader, worker_writer
         )
     )
-    await _write_frame(
+    await write_worker_frame(
         parent_writer,
         {"version": 1, "request_id": None, "operation": "inspect"},
     )
@@ -448,11 +448,11 @@ async def _client_with_response(
     async def respond() -> None:
         try:
             try:
-                await _read_frame(worker_reader)
+                await read_worker_frame(worker_reader)
             except asyncio.IncompleteReadError:
                 return
             if response is not None:
-                await _write_frame(worker_writer, response)
+                await write_worker_frame(worker_writer, response)
         finally:
             worker_writer.close()
             await worker_writer.wait_closed()
@@ -651,22 +651,22 @@ async def test_protocol_frame_validation_and_size_limits() -> None:
     reader = asyncio.StreamReader()
     reader.feed_data(struct.pack("!I", 1) + b"{")
     with pytest.raises(BrowserWorkerError, match="size"):
-        await _read_frame(reader)
+        await read_worker_frame(reader)
 
     reader = asyncio.StreamReader()
     reader.feed_data(struct.pack("!I", 2) + b"[]")
     with pytest.raises(BrowserWorkerError, match="object"):
-        await _read_frame(reader)
+        await read_worker_frame(reader)
 
     reader = asyncio.StreamReader()
     reader.feed_data(struct.pack("!I", 2) + b"{{")
     with pytest.raises(BrowserWorkerError, match="valid JSON"):
-        await _read_frame(reader)
+        await read_worker_frame(reader)
 
     parent, child = socket.socketpair()
     _reader, writer = await _streams(parent)
     with pytest.raises(BrowserWorkerError, match="exceeds"):
-        await _write_frame(writer, {"value": "x" * (1024 * 1024)})
+        await write_worker_frame(writer, {"value": "x" * (1024 * 1024)})
     writer.close()
     await writer.wait_closed()
     child.close()
@@ -744,7 +744,7 @@ def test_spawn_worker_builds_private_fd_command(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_available_loopback_port_returns_bindable_port() -> None:
-    port = _available_loopback_port()
+    port = available_loopback_port()
     assert 0 < port < 65_536
 
 
@@ -760,9 +760,9 @@ async def test_launch_local_bootstraps_worker_and_boundary_events(
 
     async def worker() -> None:
         reader, writer = await _streams(worker_socket)
-        init = await _read_frame(reader)
+        init = await read_worker_frame(reader)
         captured.update(init)
-        await _write_frame(writer, {"version": 1, "status": "ready"})
+        await write_worker_frame(writer, {"version": 1, "status": "ready"})
         lease_record = cast(Mapping[str, object], init["lease"])
         lease = SessionLease(
             LeaseConfig(
@@ -832,8 +832,8 @@ async def test_launch_local_rejects_persistence_and_cleans_up_failed_worker(
 
     async def failing_worker() -> None:
         reader, writer = await _streams(worker_socket)
-        await _read_frame(reader)
-        await _write_frame(writer, {"version": 1, "status": "failed", "error": "boom"})
+        await read_worker_frame(reader)
+        await write_worker_frame(writer, {"version": 1, "status": "failed", "error": "boom"})
         writer.close()
         await writer.wait_closed()
 

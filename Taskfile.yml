@@ -53,6 +53,13 @@ tasks:
     cmds:
       - uv run pytest tests/test_stagehand_browser_e2e.py::test_real_supervised_browser_denies_before_outside_contact --no-cov
 
+  test-browser-isolation:
+    desc: Run the isolated Chromium acceptance gate against the installed Linux launcher
+    env:
+      UBC_RUN_ISOLATED_BROWSER_E2E: "1"
+    cmds:
+      - uv run pytest -m isolated_browser --no-cov
+
   build:
     desc: Build the source distribution and wheel
     cmds:
