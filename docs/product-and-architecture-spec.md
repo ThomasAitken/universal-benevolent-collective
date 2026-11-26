@@ -1072,16 +1072,16 @@ When introduced:
 
 ## 14. Delivery roadmap
 
-The estimates below are elapsed calendar ranges for one focused part-time
-maintainer. They assume prompt product decisions and extensive automated
-verification. Independent security review, legal work, service-provider
-approval, and other external dependencies may extend a gate without requiring
-the implementation itself to stop.
+Progress through these phases is governed by capability dependencies and
+evidence gates. Work may proceed in parallel where boundaries are stable.
+Independent security review, legal work, service-provider approval, and other
+external dependencies can hold a gate without requiring unrelated
+implementation to stop.
 
 The implementation-level sequence for the current stage is maintained in the
-[near-term roadmap](near-term-roadmap.md).
+[single-node pilot roadmap](single-node-pilot-roadmap.md).
 
-### Phase 0 — Single-node safety foundation (1–2 weeks)
+### Phase 0 — Single-node safety foundation
 
 Deliverables:
 
@@ -1116,7 +1116,7 @@ Exit criteria:
 - ordinary personal profiles, valuable accounts, and real external writes
   remain prohibited.
 
-### Phase 1 — Hardened local pilot (3–5 weeks)
+### Phase 1 — Hardened local pilot
 
 Deliverables:
 
@@ -1163,7 +1163,7 @@ Exit criteria:
 - an independent reviewer accepts the local pilot boundary and documented
   residual risks.
 
-### Phase 2 — Capacity-limited multi-node alpha (3–5 weeks)
+### Phase 2 — Capacity-limited multi-node alpha
 
 Deliverables:
 
@@ -1200,7 +1200,7 @@ Exit criteria:
   pass;
 - pilot work has documented human review, provenance, and measurable utility.
 
-### Phase 3 — Public alpha and bounded beta (4–6 weeks)
+### Phase 3 — Public alpha and bounded beta
 
 Deliverables:
 

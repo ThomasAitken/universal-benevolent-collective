@@ -15,8 +15,8 @@ The knowledge-base wire formats separate the
 [single-node prototype reference](docs/prototype.md) describes the implemented
 runtime, browser boundary, policy, human takeover, supervised egress mode,
 repeatable demonstration, and current security limitations. The
-[near-term roadmap](docs/near-term-roadmap.md) defines the next local hardening
-and low-value-account pilot gates.
+[single-node pilot roadmap](docs/single-node-pilot-roadmap.md) is the living
+work tracker for the next local hardening and low-value-account pilot gates.
 
 ## Current status
 
