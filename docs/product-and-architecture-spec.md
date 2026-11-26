@@ -1072,106 +1072,169 @@ When introduced:
 
 ## 14. Delivery roadmap
 
-### Phase 0 — Founding decisions and experiments (4–6 weeks)
+The estimates below are elapsed calendar ranges for one focused part-time
+maintainer. They assume prompt product decisions and extensive automated
+verification. Independent security review, legal work, service-provider
+approval, and other external dependencies may extend a gate without requiring
+the implementation itself to stop.
+
+The implementation-level sequence for the current stage is maintained in the
+[near-term roadmap](near-term-roadmap.md).
+
+### Phase 0 — Single-node safety foundation (1–2 weeks)
 
 Deliverables:
 
-- constitution outline and governance/amendment procedure;
-- founder-operated infrastructure model, interim steward roles, and a procedure
-  for gradually granting and reviewing administrative trust;
-- public protocol vocabulary and this threat model;
-- Stagehand v4 adapter and acceptance/security spike against the UBC browser
-  task and threat suite;
-- human browser-takeover and project-profile prototype;
-- sandbox/egress spike and provider-neutral model adapter;
-- identity/attestation experiment on Linux/macOS/Windows;
-- project charter template, risk rubric, and action taxonomy;
-- complete the knowledge-base Phase 0 design and prototype deliverables in its
-  [feature delivery plan](knowledge-base-spec.md#12-delivery-plan);
-- explicit abuse policy for public communications.
+- constitution, governance model, protocol vocabulary, threat model, project
+  charter, risk rubric, and action taxonomy;
+- provider-neutral structured model boundary with local, OpenAI-compatible,
+  and Gemini-backed execution paths;
+- bounded supervisor with explicit lifecycle, cancellation, budgets, semantic
+  policy, one-shot approval, and correlated audit events;
+- pinned Stagehand adapter with a narrow typed browser surface and no raw
+  model-facing CDP, JavaScript, selector, cookie, storage, or host-path access;
+- visible human takeover that suspends model observation and returns only a
+  redacted outcome;
+- supervised browser worker, disposable profile, expiring session lease, and
+  external allow-listing egress gate for the local acceptance fixture;
+- restartable research demonstration with prompt-injection containment,
+  denied redirect, mock authentication, captured evidence, and cited report;
+- knowledge-base schemas and design deliverables in its
+  [feature delivery plan](knowledge-base-spec.md#12-delivery-plan).
 
 Exit criteria:
 
-- stewards approve launch scope and prohibited actions;
-- a node can complete one local browser research task and one software task in
-  disposable sandboxes;
-- a handler can take over and return an authenticated browser without exposing
-  entered credentials to model context or telemetry;
-- the team accepts that T0/T1 nodes cannot receive raw confidential
-  credentials and that private-resource access remains separately gated;
-- independent security reviewer agrees the proposed boundaries are plausible.
+- the deterministic suite covers all runtime branches and the real-browser
+  acceptance suite passes on a supported local Chromium build;
+- denied fixture traffic is rejected before the denied server receives a
+  request;
+- cancellation, restart, expiry, revocation, channel loss, and browser-worker
+  failure have explicit terminal behavior;
+- credentials entered during takeover do not appear in model context, normal
+  events, screenshots, or artifacts;
+- every material demonstration claim links to captured evidence;
+- ordinary personal profiles, valuable accounts, and real external writes
+  remain prohibited.
 
-### Phase 1 — Single-node vertical slice (6–8 weeks)
+### Phase 1 — Hardened local pilot (3–5 weeks)
 
 Deliverables:
 
-- signed CLI/container, local key, device enrollment, and constitution assent;
-- project list, assignment, bounded loop, pause/revoke, and cost controls;
-- Postgres schema, workflow engine, object store, and audit events;
-- one software, one research, and one long-form writing workflow;
-- complete the knowledge-base Phase 1 retrieval, proposal, storage, and review
-  vertical slice;
-- dashboard showing node/task/project state;
-- public demonstration artifacts and a reproducible demo anyone can run with
-  their own local model or API subscription;
-- no external write capabilities; fixtures/mock integrations only.
+- rootless container, VM, or separate-account browser isolation with
+  proxy-only networking enforced outside Chromium;
+- an explicit constitution-bound trusted node core—supervisor, executable
+  policy, audit writer, node-key interface, and release manifest—that hostile
+  pages and the browser security domain cannot modify or impersonate;
+- signed reproducible node and browser artifacts whose release manifest binds
+  code, dependency lock, executable policy, and constitution version/digest;
+- authenticated browser control and egress channels, approved HTTPS
+  destinations, controlled DNS, and no sandbox-reachable raw debugging port;
+- quarantined download lifecycle with size/type/archive limits, secret and
+  malware scanning, explicit release, and content-addressed provenance;
+- encrypted project profiles with idle and absolute expiry, local session
+  registry, revocation, and crash-safe cleanup;
+- local authenticated takeover and active-session UI;
+- durable action-attempt ledger with idempotency keys, reconciliation, and
+  explicit `unknown_outcome` handling for consequential actions;
+- one research workflow, one software workflow, and one long-form writing
+  workflow using the same policy and artifact boundaries;
+- the knowledge-base Phase 1 retrieval, proposal, append-only storage, and
+  human-review vertical slice;
+- one dedicated, low-value project account used first for read-only or draft
+  work, with separate recovery and no ordinary personal data.
 
 Exit criteria:
 
-- crash/restart and cancellation do not duplicate task results;
-- cross-project authorization tests pass;
-- assent/version/update/revocation flows work end-to-end;
-- knowledge-base Phase 1 launch gates pass; no model can publish directly;
-- all runs have provenance and budget evidence.
+- the browser cannot reach any destination except through the externally
+  enforced gate, including after renderer or worker compromise tests;
+- a compromised page, renderer, or browser worker cannot alter the supervisor
+  or policy, change the bound constitution digest, read node identity keys, or
+  forge events in the core audit stream;
+- another process running as the same host user cannot use the browser control
+  or proxy capability merely by discovering a port;
+- rejected or unscanned downloads never enter a task workspace or model
+  context;
+- session expiry and revocation make the authenticated browser capability
+  unusable without deleting required audit evidence;
+- crash/retry tests do not duplicate known consequential effects, and ambiguous
+  attempts stop for reconciliation;
+- the dedicated pilot account exposes no reusable credential to model context
+  or arbitrary model-controlled code;
+- an independent reviewer accepts the local pilot boundary and documented
+  residual risks.
 
-### Phase 2 — Public multi-node alpha (8–12 weeks)
+### Phase 2 — Capacity-limited multi-node alpha (3–5 weeks)
 
 Deliverables:
 
-- public outreach and self-service enrollment, with capacity queues, per-account
-  quotas, abuse controls, and progressive trust rather than social invitations;
+- modular-monolith control plane with Postgres, durable workflows, encrypted
+  object storage, identity, project/task assignment, leases, audit, and quotas;
+- signed node/container release, local node key, device enrollment,
+  constitution assent, update policy, and release revocation;
+- release verification and optional platform-attestation evidence evaluated
+  into a trust tier rather than accepting self-reported hashes as proof;
+- initially private then capacity-limited self-service enrollment with stable
+  accounts, abuse controls, and progressive trust rather than social
+  invitations;
 - structured project collaboration and independent/critic/review patterns;
-- complete the knowledge-base Phase 2 public read, review, correction, dispute,
-  supersession, and retraction workflows;
 - participant caps, capability profiles, trust tiers, and human overrides;
-- capability broker with one low-risk integration, such as GitHub draft branches
-  through a GitHub App;
-- one non-public browser application on a founder-managed node, using a
-  dedicated project account, controlled session, and human-assisted
-  sign-in/verification;
+- capability broker with one narrow, reversible integration, such as draft
+  branches through a GitHub App;
+- dashboard for assignments, task state, approvals, browser sessions, spend,
+  audit, objections, and revocation;
+- complete knowledge-base proposal/review workflow and a read-only surface for
+  pilot participants;
 - approvals, objections, appeals, incident controls, quotas, and audit viewer;
 - red-team harness and privacy/export/delete workflows.
 
 Exit criteria:
 
-- successful security review and incident exercise;
+- a small group of independently operated nodes completes useful projects
+  without cross-project or cross-participant access;
 - no reusable integration secret reaches model context or arbitrary
   model-controlled code;
 - expired/revoked/zombie nodes cannot commit work or actions;
+- replay, retry, partition, and lease-fencing tests pass;
 - users can understand and control assignment, spend, and data exposure;
-- pilot produces useful work with documented human review;
-- published pilot theses have verified citations, attributable revisions, and
-  complete public correction history.
+- restore, release-revocation, compromised-node, and network-pause exercises
+  pass;
+- pilot work has documented human review, provenance, and measurable utility.
 
-### Phase 3 — Expanded public beta, still bounded (12+ weeks)
+### Phase 3 — Public alpha and bounded beta (4–6 weeks)
 
 Deliverables:
 
-- scale self-service T0/T1 enrollment and strengthen abuse/Sybil controls;
+- public capacity queue and progressively expanded T0/T1 self-enrollment;
+- stronger abuse, Sybil, quota, anomaly, and moderation controls;
 - supported local-model profiles and release compatibility policy;
 - multiple project templates and brokered integrations;
-- complete the knowledge-base Phase 3 mature-domain retrieval, scaling, and
-  transparency work;
+- public knowledge-base read surface with stable revisions, citations, search,
+  correction, dispute, supersession, retraction, and status propagation;
 - public transparency metrics and governance records;
 - T2 attestation pilot for a narrow supported platform;
 - external penetration test, bug bounty, and operational SLOs.
 
+Exit criteria:
+
+- public enrollment can be paused, capped, or revoked without stranding active
+  safety operations;
+- authorization, tenant isolation, privacy lifecycle, moderation, and
+  knowledge-integrity launch gates pass;
+- external testing finds no unresolved critical boundary failure;
+- public participants can inspect governance, provenance, correction history,
+  system status, and the limits of agent authority;
+- operating load and incident response remain manageable before capacity is
+  expanded.
+
 Public beta still excludes money movement and autonomous social campaigning.
 
-### Phase 4 — Separately approved capabilities
+### Phase 4 — Expanded beta and separately approved capabilities
 
-Each of the following requires a new threat model, governance vote, legal
-review, independent security review, and feature-specific pilot:
+After a stable bounded beta, scale supported workflows, integrations, trust
+profiles, and operating capacity only as the evidence permits. The following
+capabilities remain outside the ordinary roadmap and each requires a new threat
+model, governance vote, legal review, independent security review, and
+feature-specific pilot:
 
 - urgent support broadcasts;
 - public-post automation;
