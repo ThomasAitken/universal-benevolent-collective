@@ -2,9 +2,9 @@
 
 ## Decision and scope
 
-C02 adds an offline browser runtime for Linux with cgroup v2, systemd 254 or
-later, local Podman 5.4 or later, and crun. A root-owned systemd socket starts
-one broker and one disposable container per connection. Only the broker uses
+The isolated browser requires Linux with cgroup v2, systemd 254 or later,
+local Podman 5.4 or later, and crun. A root-owned systemd socket starts one
+broker, one browser container, and one egress gate container per connection. Only the broker uses
 rootful Podman. The worker and Chromium run as UID/GID 65532 (`ubc-browser`)
 inside a private user namespace mapped to subordinate host IDs. This uses the
 backend recorded in the C01 manifest while keeping runtime storage and engine
@@ -21,7 +21,7 @@ boundary.
 
 Native macOS and Windows, Docker Desktop, and the existing local in-process
 and supervised browser demos remain development fixtures. A disposable Linux
-guest running the specified stack can supply C02 acceptance evidence. Run
+guest running the specified stack can supply local acceptance evidence. Run
 the integrated Milestone A gate on the intended Linux pilot deployment to
 verify its authority and network configuration. Linux launch failures are
 terminal and there is no fallback to the development modes.
@@ -49,34 +49,34 @@ browser runtime receives no node-key object and no core audit sink. Browser
 boundary events are untrusted facts consumed and wrapped by the trusted audit
 writer; they are not direct writes to the core journal.
 
-## Build and install the C02 fixture
+## Build and install the runtime
 
 Use a disposable Linux test host. With a Docker build host and rootful Podman
 available on the test host, build and load the same named OCI image:
 
 ```shell
-docker build --file browser-runtime/Dockerfile --tag localhost/ubc-browser:c02 .
-image=$(docker image inspect localhost/ubc-browser:c02 --format '{{index .RepoDigests 0}}')
-docker save localhost/ubc-browser:c02 | sudo podman load
+docker build --provenance=false --file browser-runtime/Dockerfile --tag localhost/ubc-browser:c03 .
+image=$(docker image inspect localhost/ubc-browser:c03 --format '{{index .RepoDigests 0}}')
+docker save localhost/ubc-browser:c03 | sudo podman load
 ```
 
-Use the digest reported by the build in both the manifest and the systemd
-release configuration. For an architecture-specific local build, generate a
+Verify the loaded image resolves by digest on the Linux host. Use that
+digest in both the manifest and systemd release configuration. For an architecture-specific local build, generate a
 local manifest from the current source tree:
 
 ```shell
 mkdir -p .ubc
 uv run ubc release-manifest \
-  --release-id 0.1.0-c02 \
+  --release-id 0.1.0-c03 \
   --constitution-version 0.1-draft \
   --browser-image-reference localhost/ubc-browser \
   --browser-image-digest "${image##*@}" \
-  --output .ubc/c02-manifest.json
+  --output .ubc/c03-manifest.json
 ```
 
 Reserve non-overlapping subordinate ranges in `/etc/subuid` and `/etc/subgid`
 for Podman's rootful `containers` allocator. The socket permits four concurrent
-connections and each uses 65,536 UID and GID slots. Confirm the local image
+connections and each uses two separate 65,536-slot UID/GID ranges. Confirm the local image
 resolves by digest with `sudo podman image inspect localhost/ubc-browser@sha256:…`.
 [Podman run reference](https://docs.podman.io/en/v5.4.2/markdown/podman-run.1.html)
 
@@ -95,11 +95,28 @@ from the loaded image and manifest:
 
 ```ini
 UBC_BROWSER_IMAGE=localhost/ubc-browser@sha256:<64 lowercase hex characters>
-UBC_BROWSER_RELEASE=0.1.0-c02
+UBC_BROWSER_RELEASE=0.1.0-c03
+UBC_EGRESS_NETWORK=ubc-egress-project
 ```
 
-Keep the launcher, unit files, and release configuration writable only by
-root. Use standard Podman seccomp and keep the Podman API socket disabled.
+Configure a dedicated Podman bridge with a trusted DNS resolver and the
+required upstream routes. Give the bridge the name in `UBC_EGRESS_NETWORK`,
+which must start with `ubc-egress-`. The browser container never joins it.
+Install a root-owned `/etc/ubc-browser/egress.json` with an exact DNS origin and
+address ranges for each approval. An empty list permits globally routable
+unicast answers. An explicit list is useful for a dedicated address range or
+an internal fixture.
+
+```json
+{
+  "https://project.example.com": []
+}
+```
+
+Keep the launcher, policy, unit files, and release configuration writable only
+by root. Use standard Podman seccomp and keep the Podman API socket disabled.
+Upgrade the launcher, image, release manifest, and configuration together.
+Isolation contract version 2 requires the private egress gate at startup.
 Activate the launcher with `sudo systemctl daemon-reload` followed by
 `sudo systemctl enable --now ubc-browser.socket`.
 [systemd socket reference](https://www.freedesktop.org/software/systemd/man/latest/systemd.socket.html)
@@ -137,30 +154,69 @@ parent connection, worker, or broker retires the container and its tmpfs
 state. A failed command is terminal and the client never reconnects or
 replays it. Lifecycle events include the release and image digest.
 
-`PodmanBrowserRuntime.launch` returns the typed `BrowserSession`. C02
-accepts only the bundled fixture origin and fixed launch limits. Its loopback
-HTTP proxy exercises an approved page and a denied redirect using the
-existing research fixture. The zero-contact check for that redirect is a
-normal-browser fixture assertion. C03 will put the egress gate in its own
-boundary and evaluate bypass resistance against a compromised worker.
+`PodmanBrowserRuntime.launch` returns the typed `BrowserSession`. It asks for
+a subset of the operator's configured origins. The broker starts an
+unprivileged gate container from the same pinned image and waits for the gate
+to accept the policy before starting the worker. The gate has its own
+network, PID, and user namespaces. It receives the operator policy over a
+private descriptor. The browser gets a read-only mount containing one
+Unix socket. Only the broker and the matching container can traverse a path
+to that endpoint. The worker bridges Chromium's loopback proxy port to the
+socket. The filesystem capability authenticates the runtime without a
+reusable proxy credential or host port.
 
-Model-assisted operations, screenshots and downloads crossing into the task
-workspace, persistent profiles, takeover, and external network access
-remain disabled. The [fixture topology](../browser-runtime/fixture-topology.json)
-describes the three networks planned for C03.
+The gate accepts ASCII DNS names and exact scheme/authority pairs with
+optional non-default ports. It resolves only approved destinations using the
+gate's resolver, checks every returned address, and opens a socket to a
+checked numeric address. Loopback, link-local, multicast, unspecified, and
+common IPv6-embedded IPv4 addresses are denied even with explicit ranges.
+The gate accepts one GET or HEAD per cleartext HTTP connection. It rejects
+request bodies, proxy upgrades, unsupported methods and malformed framing.
+HTTPS uses a blind CONNECT tunnel to an approved authority. The tunnel
+cannot enforce the TLS virtual host, encrypted HTTP methods or payloads.
+An approved HTTPS page can issue writes through its tunnel.
+Approve dedicated HTTPS endpoints whose service and address do not relay
+traffic or share authority with denied services.
 
-## C02 acceptance
+Chromium uses a fixed proxy with QUIC and non-proxied WebRTC UDP disabled.
+It starts with a fresh profile and the bundled Stagehand extension. All
+external extension traffic follows the same network boundary and gate
+policy. The browser IP namespace has only loopback, and the worker cannot
+open an IP connection to the gate, a DNS server, or a destination. Loss of
+the gate closes the control connection, revokes the session, and retires
+both containers. Model-assisted operations, artifact export, persistent
+profiles, and takeover remain disabled.
 
-As the ordinary node user on the test host, run:
+## C03 acceptance
+
+Use a disposable Linux test host. Build and load the base image as above.
+Run the fixture setup as root from the repository root:
 
 ```shell
-UBC_ISOLATION_MANIFEST=.ubc/c02-manifest.json task test-browser-isolation
+image=$(sudo sh tests/setup_egress_fixture.sh localhost/ubc-browser:c03)
 ```
 
-As a separate root operator on the same disposable host, run the same gate
-with `UBC_RUN_ISOLATION_ADMIN=1` to also inspect runtime limits, test node
-file and network separation from inside the container, and kill the worker,
-Podman process, broker, and parent separately. Run with no other isolated
-browser sessions.
-Use the checked release manifest by omitting `UBC_ISOLATION_MANIFEST` when it
-matches the installed image.
+This creates an internal fixture network with approved HTTP and TLS endpoints
+and a denied TCP/UDP contact counter. It installs the fixture egress policy
+and derives a test-only image that trusts the generated TLS fixture key. Use
+the returned image reference and digest with `UBC_EGRESS_NETWORK=ubc-egress-fixture`
+and `UBC_BROWSER_RELEASE=0.1.0-c03-fixture`. Generate a local manifest using
+the same release ID and image digest. Restart the launcher socket after
+installing the configuration if it is already active. The ordinary base image
+uses Chromium's standard TLS verification configuration.
+
+Run this as the ordinary node user and again as root with
+`UBC_RUN_ISOLATION_ADMIN=1`. Run with no other isolated browser sessions.
+
+```shell
+UBC_ISOLATION_MANIFEST=.ubc/c03-fixture-manifest.json task test-browser-isolation
+```
+
+The ordinary run covers real Chromium HTTP/HTTPS navigation, the renderer
+fixture, redirects, session separation, and proxy endpoint permissions. The
+operator run also checks the denied counter, exercises direct TCP and UDP
+attempts and disallowed proxy requests from the browser namespace, and
+terminates the parent, worker, runtime, broker, and gate separately. Both
+containers must be removed after termination. Discard the fixture host, or
+stop the launcher and remove the two fixture containers, fixture network,
+configuration and derived image before reusing it.

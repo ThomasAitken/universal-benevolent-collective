@@ -214,6 +214,7 @@ class StagehandBrowserAdapter:
         debugging_port: int | None = None,
         chromium_sandbox: bool | None = None,
         accept_downloads: bool = True,
+        browser_args: tuple[str, ...] = (),
     ) -> "StagehandBrowserAdapter":  # pragma: no cover - exercised by opt-in browser test
         """Launch the pinned Stagehand local browser with a policy-bound profile."""
         from stagehand import Stagehand, local_browser
@@ -230,6 +231,7 @@ class StagehandBrowserAdapter:
             profile_path.mkdir(parents=True, exist_ok=True, mode=0o700)
 
         browser = await local_browser.launch(
+            args=browser_args,
             port=debugging_port,
             executable_path=chrome_path,
             user_data_dir=profile_path,

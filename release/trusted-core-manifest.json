@@ -1,7 +1,7 @@
 {
   "browser_image": {
-    "build_context_sha256": "sha256:9d42d81c789bc1eb5b1c75be2530af3f60c7eb95492342491292e71b7be92306",
-    "digest": "sha256:d033507a3db8792c249626fca0c3e9fe6f9005cfcd0717c09bf427f15800f33c",
+    "build_context_sha256": "sha256:33f47afa9dfd5181f27e6c63bac55c32967e19c175a205a9cc96b851739ea009",
+    "digest": "sha256:56b5e6950f2fbccc343bf10f5ebb16066141052f26c066ab5d53a1b978f81a69",
     "reference": "localhost/ubc-browser"
   },
   "constitution": {
@@ -15,9 +15,9 @@
   },
   "isolation": {
     "backend": "linux-rootful-podman-service",
-    "contract_version": 1
+    "contract_version": 2
   },
-  "release_id": "0.1.0-c02",
+  "release_id": "0.1.0-c03",
   "schema_version": 1,
   "trusted_core": {
     "audit_writer": {

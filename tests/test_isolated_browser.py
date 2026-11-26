@@ -20,7 +20,7 @@ import pytest
 from ubc_node import isolated_browser, isolated_worker
 from ubc_node.browser_contracts import BrowserSessionState
 from ubc_node.contracts import ActionProposal
-from ubc_node.isolated_browser import FIXTURE_ORIGIN, IsolatedBrowserError, PodmanBrowserRuntime
+from ubc_node.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
 from ubc_node.isolation_contracts import (
     BoundaryChannelKind,
     ChannelCapability,
@@ -33,6 +33,7 @@ from ubc_node.supervised_browser import BrowserWorkerError, read_worker_frame, w
 
 ROOT = Path(__file__).parents[1]
 DIGEST = "sha256:" + "a" * 64
+FIXTURE_ORIGIN = "http://approved.test:18765"
 SPEC = IsolatedBrowserLaunchSpec(
     "fixture",
     DIGEST,
@@ -40,7 +41,14 @@ SPEC = IsolatedBrowserLaunchSpec(
     ChannelCapability("control", BoundaryChannelKind.CONTROL),
     ChannelCapability("egress", BoundaryChannelKind.EGRESS),
 )
-BROKER = {"status": "broker", "version": 1, "image_digest": DIGEST, "release_id": "c02"}
+BROKER = {
+    "status": "broker",
+    "version": 1,
+    "egress": "unix",
+    "image_digest": DIGEST,
+    "release_id": "c03",
+}
+INIT = {"version": 1, "session_id": "fixture", "origins": [FIXTURE_ORIGIN]}
 READY = {"status": "ready", "version": 1}
 INSPECTION = {
     "tab_id": "local-tab",
@@ -74,7 +82,7 @@ def runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PodmanBrowserRun
         manifest,
         create_release_manifest(
             ROOT,
-            release_id="c02",
+            release_id="c03",
             constitution_version="0.1-draft",
             browser_image_reference="localhost/browser",
             browser_image_digest=DIGEST,
@@ -102,7 +110,7 @@ async def _launch(
     _mock_connection(monkeypatch, client_reader, client_writer)
     await write_worker_frame(worker_writer, BROKER)
     launch = asyncio.create_task(runtime.launch(SPEC))
-    assert await read_worker_frame(worker_reader) == {"version": 1, "session_id": "fixture"}
+    assert await read_worker_frame(worker_reader) == INIT
     await write_worker_frame(worker_writer, READY)
     return await launch
 
@@ -111,8 +119,7 @@ async def _launch(
     ("spec", "error"),
     [
         (replace(SPEC, browser_image_digest="sha256:" + "b" * 64), "verified release"),
-        (replace(SPEC, allowed_origins=frozenset({"http://fixture.test"})), "offline fixture"),
-        (replace(SPEC, limits=RuntimeLimits(process_count=32)), "fixed limits"),
+        (replace(SPEC, limits=RuntimeLimits(process_count=32)), "fixed runtime limits"),
         (
             replace(SPEC, control_channel=replace(SPEC.control_channel, protocol_version=2)),
             "version",
@@ -155,6 +162,7 @@ def test_launcher_must_be_root(uid: int) -> None:
     [
         ({**BROKER, "image_digest": "wrong"}, None, "launcher release"),
         ({**BROKER, "version": True}, None, "launcher release"),
+        ({**BROKER, "egress": None}, None, "launcher release"),
         (BROKER, {"status": "failed"}, "failed to start"),
         (BROKER, {**READY, "version": True}, "failed to start"),
         (BROKER, None, "startup failed"),
@@ -220,7 +228,7 @@ async def test_typed_browser_methods_and_lifecycle(
         event = await runtime.next_event()
         assert event.sequence == 1 and event.kind == "isolated_browser_started"
         assert event.payload["browser_image_digest"] == DIGEST
-        assert event.payload["release_id"] == "c02"
+        assert event.payload["release_id"] == "c03"
 
         with pytest.raises(BrowserWorkerError, match="disabled"):
             await session.screenshot()
@@ -346,7 +354,9 @@ async def test_event_queue_is_bounded(runtime: PodmanBrowserRuntime) -> None:
     assert (await runtime.next_event()).sequence == 2
 
 
-@pytest.mark.parametrize("init", [None, {"version": True}, {"version": 2}, {"version": 1}])
+@pytest.mark.parametrize(
+    "init", [None, {"version": True}, {"version": 2}, {"version": 1}, {**INIT, "origins": [None]}]
+)
 async def test_worker_rejects_invalid_startup(init: Mapping[str, object] | None) -> None:
     async with _channel() as (client_reader, client_writer, worker_reader, worker_writer):
         task = asyncio.create_task(isolated_worker._serve(worker_reader, worker_writer))
@@ -361,20 +371,13 @@ async def test_worker_rejects_invalid_startup(init: Mapping[str, object] | None)
             assert await client_reader.read() == b""
 
 
-@pytest.mark.parametrize(
-    "outcome", ["ok", "denied", "contacted", "bypass", "startup-write", "startup-fail"]
-)
-async def test_worker_starts_only_local_fixture(
-    monkeypatch: pytest.MonkeyPatch,
-    outcome: str,
-) -> None:
-    gate = Mock(endpoint="http://127.0.0.1:8081", denial_count=0)
-    gate.start = AsyncMock()
-    gate.close = AsyncMock()
-    fixture = Mock()
-    fixture.__enter__ = Mock(return_value=fixture)
-    fixture.__exit__ = Mock(return_value=None)
-    fixture.outside_request_count = int(outcome in {"contacted", "bypass"})
+@pytest.mark.parametrize("outcome", ["ok", "startup-write", "startup-fail", "already-closed"])
+async def test_worker_uses_private_proxy(monkeypatch: pytest.MonkeyPatch, outcome: str) -> None:
+    @asynccontextmanager
+    async def proxy() -> AsyncGenerator[str]:
+        yield "http://127.0.0.1:8081"
+
+    monkeypatch.setattr(isolated_worker, "_proxy", proxy)
     browser = Mock(state=BrowserSessionState.ACTIVE)
 
     async def revoke() -> None:
@@ -383,22 +386,19 @@ async def test_worker_starts_only_local_fixture(
     browser.revoke = AsyncMock(side_effect=revoke)
 
     async def execute(proposal: ActionProposal) -> Mapping[str, object]:
-        if proposal.parameters["operation"] == "open" and outcome in {"denied", "contacted"}:
-            gate.denial_count += 1
-            raise RuntimeError("proxy denied")
-        return {"state": "active"}
+        if proposal.parameters["operation"] == "close":
+            browser.state = BrowserSessionState.CLOSED
+        return {"state": browser.state.value}
 
     browser.execute = execute
     launch = AsyncMock(return_value=browser)
     if outcome == "startup-fail":
         launch.side_effect = RuntimeError("startup failed")
     monkeypatch.setattr(isolated_worker.StagehandBrowserAdapter, "launch_local", launch)
-    monkeypatch.setattr(isolated_worker, "EgressGate", Mock(return_value=gate))
-    monkeypatch.setattr(isolated_worker, "Phase5FixtureSite", Mock(return_value=fixture))
     async with _channel() as (client_reader, client_writer, worker_reader, worker_writer):
         if outcome == "startup-write":
             monkeypatch.setattr(worker_writer, "drain", AsyncMock(side_effect=BrokenPipeError))
-        await write_worker_frame(client_writer, {"version": 1, "session_id": "fixture"})
+        await write_worker_frame(client_writer, INIT)
         task = asyncio.create_task(isolated_worker._serve(worker_reader, worker_writer))
         if outcome in {"startup-write", "startup-fail"}:
             with pytest.raises((BrokenPipeError, RuntimeError)):
@@ -407,7 +407,8 @@ async def test_worker_starts_only_local_fixture(
             assert await read_worker_frame(client_reader) == READY
             assert launch.call_args.kwargs["accept_downloads"] is False
             assert launch.call_args.args[0].allowed_origins == {FIXTURE_ORIGIN}
-            for request_id, operation in enumerate(("screenshot", "open"), 1):
+            operation_to_run = "close" if outcome == "already-closed" else "open"
+            for request_id, operation in enumerate(("screenshot", operation_to_run), 1):
                 await write_worker_frame(
                     client_writer,
                     {"version": 1, "request_id": request_id, "operation": operation},
@@ -415,17 +416,14 @@ async def test_worker_starts_only_local_fixture(
                 result = await read_worker_frame(client_reader)
                 if operation == "screenshot":
                     assert result["error_type"] == "BrowserWorkerError"
-                elif outcome == "ok":
-                    assert result["ok"] is True
-                elif outcome == "denied":
-                    assert result["error_type"] == "NavigationPolicyError"
                 else:
-                    assert result["error_type"] == "BrowserWorkerError"
+                    assert result["ok"] is True
             client_writer.close()
             await task
-        gate.close.assert_awaited_once()
-        if outcome != "startup-fail":
+        if outcome in {"ok", "startup-write"}:
             browser.revoke.assert_awaited_once()
+        else:
+            browser.revoke.assert_not_awaited()
 
 
 async def test_malformed_typed_result_and_failed_close_revoke_session(
@@ -467,6 +465,28 @@ def _load_broker_module() -> ModuleType:
     return module
 
 
+async def test_broker_startup_accepts_only_session_metadata() -> None:
+    broker = _load_broker_module()
+    reader = asyncio.StreamReader()
+    reader.feed_data(broker._frame(INIT))
+    assert await broker._startup(reader) == INIT
+
+    for message in (
+        {**INIT, "network": "host"},
+        {**INIT, "version": True},
+        {**INIT, "session_id": "../another-worker"},
+        {**INIT, "origins": []},
+        {**INIT, "origins": ["x" * 271]},
+    ):
+        reader.feed_data(broker._frame(message))
+        with pytest.raises(ValueError, match="invalid browser startup request"):
+            await broker._startup(reader)
+
+    reader.feed_data(struct.pack("!I", broker.STARTUP_LIMIT + 1))
+    with pytest.raises(ValueError, match="invalid browser startup size"):
+        await broker._startup(reader)
+
+
 def test_broker_validation_and_podman_command(monkeypatch: pytest.MonkeyPatch) -> None:
     broker = _load_broker_module()
     invocation_id = "0123456789abcdef" * 2
@@ -480,7 +500,14 @@ def test_broker_validation_and_podman_command(monkeypatch: pytest.MonkeyPatch) -
     with pytest.raises(ValueError, match="immutable OCI digest"):
         broker.image_digest("localhost/ubc-browser:latest")
 
-    command = broker.podman_command("ubc-browser-test", image, 7, "/system.slice/ubc-browser.slice")
+    endpoint = Path("/run/ubc-browser/test/endpoint")
+    cgroup = "/system.slice/ubc-browser.slice"
+    command = broker.podman_command("ubc-browser-test", image, 7, cgroup, endpoint)
+    gate = broker._gate_command("ubc-browser-test", image, 8, 9, cgroup, "ubc-egress-fixture")
+    assert "--name=ubc-egress-test" in gate
+    assert "--preserve-fd=8,9" in gate
+    assert "--network=ubc-egress-fixture" in gate
+    assert all(not flag.startswith("--volume=") for flag in gate)
     for flag in (
         "--pull=never",
         "--rm",
@@ -493,6 +520,7 @@ def test_broker_validation_and_podman_command(monkeypatch: pytest.MonkeyPatch) -
         "--pid=private",
         "--ipc=private",
         "--network=none",
+        f"--volume={endpoint}:/run/ubc-egress:ro",
         "--http-proxy=false",
         "--no-hosts",
         "--cap-drop=all",
@@ -522,7 +550,15 @@ def test_broker_validation_and_podman_command(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(subprocess, "run", run_mock)
     broker.main()
     run_mock.assert_called_once_with(
-        [*broker.PODMAN, "rm", "--force", "--time=0", "--ignore", f"ubc-browser-{invocation_id}"],
+        [
+            *broker.PODMAN,
+            "rm",
+            "--force",
+            "--time=0",
+            "--ignore",
+            f"ubc-egress-{invocation_id}",
+            f"ubc-browser-{invocation_id}",
+        ],
         check=True,
     )
 
@@ -530,4 +566,49 @@ def test_broker_validation_and_podman_command(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("UBC_BROWSER_IMAGE", image)
     monkeypatch.setenv("UBC_BROWSER_RELEASE", "bad/release")
     with pytest.raises(ValueError, match="release ID"):
+        broker.main()
+
+
+def test_broker_cleanup_and_egress_config_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    broker = _load_broker_module()
+    invocation_id = "0123456789abcdef" * 2
+    image = f"localhost/ubc-browser@{DIGEST}"
+    monkeypatch.setenv("INVOCATION_ID", invocation_id)
+
+    session_dir = tmp_path / invocation_id
+    endpoint = session_dir / "endpoint"
+    endpoint.mkdir(parents=True)
+    (endpoint / "proxy.sock").write_text("")
+    monkeypatch.setattr(broker, "_session_directory", Mock(return_value=session_dir))
+    monkeypatch.setattr(broker.sys, "argv", ["broker.py", "cleanup"])
+    monkeypatch.setattr(subprocess, "run", Mock())
+    broker.main()
+    assert not session_dir.exists()
+
+    endpoint.mkdir(parents=True)
+    (endpoint / "proxy.sock").write_text("")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        Mock(side_effect=subprocess.CalledProcessError(1, ["podman", "rm"])),
+    )
+    with pytest.raises(subprocess.CalledProcessError):
+        broker.main()
+    assert not session_dir.exists()
+
+    monkeypatch.setattr(broker.sys, "argv", ["broker.py", "run"])
+    monkeypatch.setenv("UBC_BROWSER_IMAGE", image)
+    monkeypatch.setenv("UBC_BROWSER_RELEASE", "0.1.0-c03")
+    for network in ("host", "bridge", "podman", "container:other", "ubc-egress-UPPER"):
+        monkeypatch.setenv("UBC_EGRESS_NETWORK", network)
+        with pytest.raises(ValueError, match="UBC_EGRESS_NETWORK"):
+            broker.main()
+
+    monkeypatch.setenv("UBC_EGRESS_NETWORK", "ubc-egress-project")
+    oversized_policy = tmp_path / "egress.json"
+    oversized_policy.write_bytes(b" " * (broker.STARTUP_LIMIT + 1))
+    monkeypatch.setattr(broker, "EGRESS_POLICY_PATH", oversized_policy)
+    with pytest.raises(ValueError, match="configuration limit"):
         broker.main()

@@ -1,17 +1,19 @@
-"""Chromium entry point for the disconnected C02 container."""
+"""Chromium worker for a disconnected network namespace with a private egress socket."""
 
 import asyncio
 import socket
 import sys
-from collections.abc import Mapping
+from collections.abc import AsyncGenerator, Mapping
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import cast
 
 from ubc_node.browser_contracts import BrowserSessionConfig, BrowserSessionState
-from ubc_node.browser_security import EgressGate, LeaseConfig, SessionLease
+from ubc_node.browser_security import LeaseConfig, SessionLease
 from ubc_node.contracts import JsonValue
-from ubc_node.demo_fixture import Phase5FixtureSite
-from ubc_node.isolated_browser import FIXTURE_OPERATIONS, FIXTURE_ORIGIN, FIXTURE_OUTSIDE_PORT
-from ubc_node.stagehand_browser import NavigationPolicyError, StagehandBrowserAdapter
+from ubc_node.isolated_browser import ISOLATED_OPERATIONS
+from ubc_node.isolated_egress import tunnel
+from ubc_node.stagehand_browser import StagehandBrowserAdapter
 from ubc_node.supervised_browser import (
     WORKER_PROTOCOL_VERSION,
     BrowserWorkerError,
@@ -21,86 +23,87 @@ from ubc_node.supervised_browser import (
     write_worker_frame,
 )
 
+_GATE_SOCKET = Path("/run/ubc-egress/proxy.sock")
+_CHROMIUM_ARGS = (
+    "--disable-quic",
+    "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+    "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1",
+)
 
-class _FixtureWorkerService(BrowserWorkerService):
-    def __init__(
-        self,
-        browser: StagehandBrowserAdapter,
-        lease: SessionLease,
-        gate: EgressGate,
-        fixture: Phase5FixtureSite,
-    ) -> None:
-        super().__init__(browser, lease)
-        self._gate = gate
-        self._fixture = fixture
 
+async def _bridge(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    gate_writer: asyncio.StreamWriter | None = None
+    try:
+        gate_reader, gate_writer = await asyncio.open_unix_connection(_GATE_SOCKET)
+        await tunnel((reader, writer), (gate_reader, gate_writer))
+    except OSError:
+        pass
+    finally:
+        if gate_writer is not None:
+            gate_writer.close()
+        writer.close()
+
+
+@asynccontextmanager
+async def _proxy() -> AsyncGenerator[str]:
+    server = await asyncio.start_server(_bridge, "127.0.0.1", 0)
+    try:
+        port = cast(tuple[str, int], server.sockets[0].getsockname())[1]
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.close()
+        server.abort_clients()
+        await server.wait_closed()
+
+
+class _IsolatedWorkerService(BrowserWorkerService):
     async def _dispatch(
         self, operation: str, parameters: Mapping[str, object]
     ) -> Mapping[str, JsonValue]:
-        if operation not in FIXTURE_OPERATIONS:
-            raise BrowserWorkerError("operation is disabled in the isolated fixture")
-        denials_before = self._gate.denial_count
-        try:
-            return await super()._dispatch(operation, parameters)
-        finally:
-            if self._fixture.outside_request_count:
-                raise BrowserWorkerError("fixture unexpectedly contacted the denied origin")
-            if self._gate.denial_count != denials_before:
-                raise NavigationPolicyError("isolated fixture navigation denied")
+        if operation not in ISOLATED_OPERATIONS:
+            raise BrowserWorkerError("operation is disabled in the isolated browser")
+        return await super()._dispatch(operation, parameters)
 
 
 async def _serve(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
     try:
         init = await read_worker_frame(reader)
-        session_id = init.get("session_id")
+        origins = init.get("origins")
         if (
             type(init.get("version")) is not int
             or init["version"] != WORKER_PROTOCOL_VERSION
-            or not isinstance(session_id, str)
+            or not isinstance(init.get("session_id"), str)
+            or not isinstance(origins, list)
+            or not all(isinstance(origin, str) for origin in cast(list[object], origins))
         ):
             raise BrowserWorkerError("invalid isolated startup frame")
-        research_port = int(FIXTURE_ORIGIN.rsplit(":", 1)[1])
-        with Phase5FixtureSite(
-            research_port=research_port, outside_port=FIXTURE_OUTSIDE_PORT
-        ) as fixture:
+
+        async with _proxy() as endpoint:
             lease = SessionLease(LeaseConfig())
-            gate = EgressGate(
-                session_id=session_id,
-                allowed_origins=frozenset({FIXTURE_ORIGIN}),
-                lease=lease,
-                event_sink=lambda _kind, _payload: None,
+            debugging_port = available_loopback_port()
+            browser = await StagehandBrowserAdapter.launch_local(
+                BrowserSessionConfig(
+                    workspace=Path("/var/lib/ubc/quarantine"),
+                    allowed_origins=frozenset(cast(list[str], origins)),
+                ),
+                temporary_profile_path=Path("/var/lib/ubc/profile/chromium"),
+                proxy_server=endpoint,
+                proxy_bypass=(
+                    f"<-loopback>;http://127.0.0.1:{debugging_port};ws://127.0.0.1:{debugging_port}"
+                ),
+                debugging_port=debugging_port,
+                chromium_sandbox=False,
+                accept_downloads=False,
+                browser_args=_CHROMIUM_ARGS,
             )
-            await gate.start()
             try:
-                debugging_port = available_loopback_port()
-                browser = await StagehandBrowserAdapter.launch_local(
-                    BrowserSessionConfig(
-                        workspace=Path("/var/lib/ubc/quarantine"),
-                        allowed_origins=frozenset({FIXTURE_ORIGIN}),
-                    ),
-                    temporary_profile_path=Path("/var/lib/ubc/profile/chromium"),
-                    proxy_server=gate.endpoint,
-                    proxy_bypass=(
-                        f"<-loopback>;http://127.0.0.1:{debugging_port};"
-                        f"ws://127.0.0.1:{debugging_port}"
-                    ),
-                    debugging_port=debugging_port,
-                    chromium_sandbox=False,
-                    accept_downloads=False,
+                await write_worker_frame(
+                    writer, {"version": WORKER_PROTOCOL_VERSION, "status": "ready"}
                 )
-                try:
-                    await write_worker_frame(
-                        writer, {"version": WORKER_PROTOCOL_VERSION, "status": "ready"}
-                    )
-                    await _FixtureWorkerService(browser, lease, gate, fixture).serve(reader, writer)
-                finally:
-                    if browser.state not in {
-                        BrowserSessionState.CLOSED,
-                        BrowserSessionState.REVOKED,
-                    }:
-                        await browser.revoke()
+                await _IsolatedWorkerService(browser, lease).serve(reader, writer)
             finally:
-                await gate.close()
+                if browser.state not in {BrowserSessionState.CLOSED, BrowserSessionState.REVOKED}:
+                    await browser.revoke()
     finally:
         writer.close()
 

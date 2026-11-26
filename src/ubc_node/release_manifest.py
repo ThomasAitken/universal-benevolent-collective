@@ -9,7 +9,7 @@ from typing import cast
 from ubc_node.contracts import JsonValue
 
 MANIFEST_SCHEMA_VERSION = 1
-ISOLATION_CONTRACT_VERSION = 1
+ISOLATION_CONTRACT_VERSION = 2
 PRIMARY_ISOLATION_BACKEND = "linux-rootful-podman-service"
 _HEX_DIGITS = frozenset("0123456789abcdef")
 

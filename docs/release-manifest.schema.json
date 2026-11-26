@@ -37,7 +37,7 @@
           "const": "linux-rootful-podman-service"
         },
         "contract_version": {
-          "const": 1
+          "const": 2
         }
       },
       "required": [

@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import signal
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -12,9 +13,10 @@ from uuid import uuid4
 
 import pytest
 
+from tests.egress_fixture import APPROVED, DENIED, DENIED_IP, DENIED_PORT, HTTP_PORT, TLS_PORT
 from ubc_node.browser_contracts import BrowserSession, BrowserSessionState
 from ubc_node.contracts import JsonValue
-from ubc_node.isolated_browser import FIXTURE_ORIGIN, IsolatedBrowserError, PodmanBrowserRuntime
+from ubc_node.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
 from ubc_node.isolation_contracts import (
     BoundaryChannelKind,
     ChannelCapability,
@@ -32,6 +34,8 @@ pytestmark = [
     ),
 ]
 
+FIXTURE_ORIGIN = f"http://{APPROVED}:{HTTP_PORT}"
+FIXTURE_TLS_ORIGIN = f"https://{APPROVED}:{TLS_PORT}"
 _ROOT = Path(__file__).resolve().parents[1]
 _MANIFEST = Path(
     os.environ.get("UBC_ISOLATION_MANIFEST", str(_ROOT / "release/trusted-core-manifest.json"))
@@ -48,7 +52,7 @@ def _spec(digest: str) -> IsolatedBrowserLaunchSpec:
     return IsolatedBrowserLaunchSpec(
         uuid4().hex,
         digest,
-        frozenset({FIXTURE_ORIGIN}),
+        frozenset({FIXTURE_ORIGIN, FIXTURE_TLS_ORIGIN}),
         ChannelCapability(uuid4().hex, BoundaryChannelKind.CONTROL),
         ChannelCapability(uuid4().hex, BoundaryChannelKind.EGRESS),
     )
@@ -62,6 +66,14 @@ async def test_isolated_chromium_approved_page_denied_redirect_and_fresh_session
         assert started.payload["browser_image_digest"] == digest
         alpha = await session.open_url(f"{FIXTURE_ORIGIN}/source/alpha")
         assert "12 hectares" in alpha.content
+        tls = await session.open_url(f"{FIXTURE_TLS_ORIGIN}/source/alpha")
+        assert "12 hectares" in tls.content
+        renderer = await session.new_tab(f"{FIXTURE_TLS_ORIGIN}/renderer")
+        async with asyncio.timeout(10):
+            while "Renderer requests finished" not in (await session.inspect()).content:  # noqa: ASYNC110
+                await asyncio.sleep(0.1)
+        await session.close_tab(renderer.tab_id)
+        await session.open_url(f"{FIXTURE_ORIGIN}/source/alpha")
         malicious = await session.new_tab(f"{FIXTURE_ORIGIN}/malicious")
         assert "Ignore the task" in (await session.inspect()).content
         assert len(await session.list_tabs()) == 2
@@ -112,6 +124,43 @@ def _container() -> str:
     return containers[0]
 
 
+def _gate(container: str) -> str:
+    return container.replace("ubc-browser-", "ubc-egress-", 1)
+
+
+def _assert_denied_untouched() -> None:
+    assert _podman("logs", "ubc-denied-fixture") == "ready"
+
+
+async def test_launcher_rejects_origins_outside_operator_policy() -> None:
+    from dataclasses import replace
+
+    runtime, digest = _runtime()
+    with pytest.raises(IsolatedBrowserError, match="startup failed"):
+        await runtime.launch(
+            replace(_spec(digest), allowed_origins=frozenset({f"http://{DENIED}:{DENIED_PORT}"}))
+        )
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="run with the ordinary node account")
+async def test_ordinary_node_cannot_connect_to_the_browser_proxy() -> None:
+    runtime, digest = _runtime()
+    session = await runtime.launch(_spec(digest))
+    try:
+        endpoints = [
+            path for path in Path("/run/ubc-browser").iterdir() if path.name != "control.sock"
+        ]
+        assert endpoints
+        for path in endpoints:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+                with pytest.raises(PermissionError):
+                    await asyncio.get_running_loop().run_in_executor(
+                        None, probe.connect, str(path / "endpoint/proxy.sock")
+                    )
+    finally:
+        await session.close()
+
+
 async def _wait_for_removal(container: str) -> None:
     async with asyncio.timeout(15):
         while True:
@@ -140,7 +189,7 @@ async def _wait_for_removal(container: str) -> None:
     os.environ.get("UBC_RUN_ISOLATION_ADMIN") != "1",
     reason="requires root in a disposable Linux test host",
 )
-@pytest.mark.parametrize("failure", ["worker", "runtime", "broker", "parent"])
+@pytest.mark.parametrize("failure", ["worker", "runtime", "broker", "gate", "parent"])
 async def test_isolation_operator_gate(tmp_path: Path, failure: str) -> None:
     assert os.geteuid() == 0
     if failure == "parent":
@@ -171,6 +220,7 @@ asyncio.run(run())
                 process.kill()
             await process.wait()
         await _wait_for_removal(container)
+        await _wait_for_removal(_gate(container))
         return
 
     runtime, digest = _runtime()
@@ -178,10 +228,11 @@ asyncio.run(run())
     try:
         await runtime.next_event()
         container = await asyncio.to_thread(_container)
+        gate = _gate(container)
         if failure == "worker":
             sentinel = tmp_path / "mock-node-key"
             sentinel.write_text("mock")
-            probe = """
+            probe = r"""
 import os
 import socket
 import sys
@@ -207,6 +258,30 @@ for path in ("/run/ubc", "/var/lib/ubc/profile", "/var/lib/ubc/quarantine"):
 with socket.socket() as probe:
     probe.settimeout(1)
     assert probe.connect_ex(("127.0.0.1", int(sys.argv[2]))) != 0
+denied, port, host, approved, http_port, tls_port = sys.argv[4:10]
+for target in ((denied, int(port)), (denied, 53), (denied, 443)):
+    with socket.socket() as probe:
+        probe.settimeout(1)
+        assert probe.connect_ex(target) != 0
+for port in (53, 443, 3478):
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        try:
+            probe.sendto(b"local network acceptance probe", (denied, port))
+        except OSError:
+            pass
+        else:
+            raise AssertionError("isolated worker unexpectedly has a UDP route")
+for request in (
+    f"GET http://{host}:{sys.argv[5]}/ HTTP/1.1\r\nHost: {host}:{sys.argv[5]}\r\n\r\n",
+    f"CONNECT {host}:{tls_port} HTTP/1.1\r\nHost: {host}:{tls_port}\r\n\r\n",
+    f"POST http://{approved}:{http_port}/ HTTP/1.1\r\nHost: {approved}:{http_port}\r\n\r\n",
+    f"CONNECT {approved}:{http_port} HTTP/1.1\r\nHost: {approved}:{http_port}\r\n\r\n",
+):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+        probe.settimeout(2)
+        probe.connect("/run/ubc-egress/proxy.sock")
+        probe.sendall(request.encode())
+        assert probe.recv(256).startswith(b"HTTP/1.1 403")
 """
             server = await asyncio.start_server(lambda _r, w: w.close(), "127.0.0.1", 0)
             try:
@@ -221,6 +296,12 @@ with socket.socket() as probe:
                     str(sentinel),
                     str(port),
                     str(Path("/proc/self/ns/net").readlink()),
+                    DENIED_IP,
+                    str(DENIED_PORT),
+                    DENIED,
+                    APPROVED,
+                    str(HTTP_PORT),
+                    str(TLS_PORT),
                 )
             finally:
                 server.close()
@@ -233,7 +314,19 @@ with socket.socket() as probe:
             assert config["PidsLimit"] == 256 and config["Memory"] == 1024**3
             assert config["CpuQuota"] == config["CpuPeriod"] > 0
             assert not config["PortBindings"] and config["NetworkMode"] == "none"
+            gate_inspected = await asyncio.to_thread(
+                _podman, "inspect", "--type", "container", gate
+            )
+            gate_config = json.loads(gate_inspected)[0]["HostConfig"]
+            assert gate_config["ReadonlyRootfs"] is True
+            assert gate_config["PidsLimit"] == 32 and gate_config["Memory"] == 128 * 1024 * 1024
+            assert gate_config["CpuQuota"] == gate_config["CpuPeriod"] > 0
+            assert not gate_config["PortBindings"] and not gate_config["Binds"]
+            assert gate_config["NetworkMode"] == "ubc-egress-fixture"
+            await asyncio.to_thread(_assert_denied_untouched)
             await asyncio.to_thread(_podman, "kill", "--signal", "KILL", container)
+        elif failure == "gate":
+            await asyncio.to_thread(_podman, "kill", "--signal", "KILL", gate)
         else:
             pid = int(
                 await asyncio.to_thread(_podman, "inspect", "--format", "{{.State.Pid}}", container)
@@ -259,12 +352,15 @@ with socket.socket() as probe:
                 podman = next(
                     int(child)
                     for child in children
-                    if Path(f"/proc/{child}/comm").read_text().strip() == "podman"
+                    if f"--name={container}".encode()
+                    in Path(f"/proc/{child}/cmdline").read_bytes().split(b"\0")
                 )
                 os.kill(podman, signal.SIGKILL)
         ended = await asyncio.wait_for(runtime.next_event(), 15)
         assert ended.kind == "isolated_browser_ended"
         assert session.state is BrowserSessionState.REVOKED
         await _wait_for_removal(container)
+        await _wait_for_removal(gate)
+        await asyncio.to_thread(_assert_denied_untouched)
     finally:
         await session.revoke()

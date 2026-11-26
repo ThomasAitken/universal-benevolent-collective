@@ -22,9 +22,7 @@ from ubc_node.supervised_browser import (
     write_worker_frame,
 )
 
-FIXTURE_ORIGIN = "http://127.0.0.1:18765"
-FIXTURE_OUTSIDE_PORT = 18766
-FIXTURE_OPERATIONS = frozenset(
+ISOLATED_OPERATIONS = frozenset(
     {
         "state",
         "observe_state",
@@ -82,8 +80,8 @@ class PodmanBrowserRuntime:
             raise IsolatedBrowserError("the isolated browser requires a Linux Podman host")
         if spec.browser_image_digest != self._digest:
             raise IsolatedBrowserError("browser image digest differs from the verified release")
-        if spec.allowed_origins != {FIXTURE_ORIGIN} or spec.limits != RuntimeLimits():
-            raise IsolatedBrowserError("C02 requires the offline fixture origin and fixed limits")
+        if spec.limits != RuntimeLimits():
+            raise IsolatedBrowserError("the isolated browser requires fixed runtime limits")
         if (
             spec.control_channel.protocol_version != WORKER_PROTOCOL_VERSION
             or spec.egress_channel.protocol_version != WORKER_PROTOCOL_VERSION
@@ -101,6 +99,7 @@ class PodmanBrowserRuntime:
                     != {
                         "status": "broker",
                         "version": WORKER_PROTOCOL_VERSION,
+                        "egress": "unix",
                         "image_digest": self._digest,
                         "release_id": self._release_id,
                     }
@@ -108,7 +107,12 @@ class PodmanBrowserRuntime:
                 ):
                     raise IsolatedBrowserError("launcher release or protocol does not match")
                 await write_worker_frame(
-                    writer, {"version": WORKER_PROTOCOL_VERSION, "session_id": spec.session_id}
+                    writer,
+                    {
+                        "version": WORKER_PROTOCOL_VERSION,
+                        "session_id": spec.session_id,
+                        "origins": sorted(spec.allowed_origins),
+                    },
                 )
                 ready = await read_worker_frame(reader)
                 if (
@@ -207,8 +211,8 @@ class IsolatedBrowserSession(BrowserWorkerClient):
         async with self._lock:
             if self._writer.is_closing():
                 raise IsolatedBrowserError("isolated browser session ended")
-            if operation not in FIXTURE_OPERATIONS:
-                raise BrowserWorkerError("operation is disabled in the isolated fixture")
+            if operation not in ISOLATED_OPERATIONS:
+                raise BrowserWorkerError("operation is disabled in the isolated browser")
             self._request_id += 1
             self._operation = operation
             pending = asyncio.get_running_loop().create_future()
@@ -268,10 +272,10 @@ class IsolatedBrowserSession(BrowserWorkerClient):
             raise IsolatedBrowserError("invalid isolated worker response")
         if not response["ok"]:
             if response.get("error_type") == "NavigationPolicyError":
-                pending.set_result(NavigationPolicyError("isolated fixture navigation denied"))
+                pending.set_result(NavigationPolicyError("isolated browser navigation denied"))
                 self._finish(BrowserSessionState.REVOKED, "navigation denied")
             else:
-                pending.set_result(BrowserWorkerError("isolated fixture command rejected"))
+                pending.set_result(BrowserWorkerError("isolated browser command rejected"))
                 self._finish(BrowserSessionState.REVOKED, "command rejected")
             return
         result = response.get("result")

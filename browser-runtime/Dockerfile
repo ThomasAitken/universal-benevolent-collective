@@ -40,5 +40,5 @@ RUN uv sync --frozen --no-dev \
 
 USER 65532:65532
 
-# The Linux launcher passes one connected control descriptor and no host mounts.
+# The Linux launcher supplies a private control descriptor and egress endpoint.
 ENTRYPOINT ["python", "-m", "ubc_node.isolated_worker"]

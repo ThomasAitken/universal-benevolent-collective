@@ -3,7 +3,7 @@
 **Document status:** Active living work tracker  
 **Delivery model:** Direct, ordered commits to `main`  
 **Last updated:** 2026-11-26  
-**Current focus:** C03 — authenticated proxy-only HTTP/HTTPS egress  
+**Current focus:** C04 — download quarantine, scanning, and promotion  
 **Pilot gate:** One dedicated, low-value project account after C01–C08 pass
 
 This roadmap turns the implemented
@@ -15,7 +15,8 @@ gates.
 
 C02 implements the isolated browser runtime and its acceptance gate. The
 prototype's supervised worker and proxy remain available for development. The
-isolated runtime is offline until C03 adds the separate egress boundary.
+isolated browser keeps its disconnected IP namespace. C03 adds a private
+connection to a separate egress gate.
 
 This boundary also protects node integrity. Web content and Chromium are
 high-exposure inputs; compromising them must not let an attacker replace the
@@ -52,7 +53,7 @@ reflects the resulting behavior and any residual limitation.
 |---|---|---|---|---|
 | SNP-01 | C01 | done | Prototype baseline | Verified trusted-core manifest, pinned non-root browser image, isolation contracts, and fixture topology |
 | SNP-02 | C02 | done | C01 | Offline Chromium isolation implemented and verified via Linux guest acceptance |
-| SNP-03 | C03 | queued | C02 | Authenticated proxy-only HTTP/HTTPS egress with controlled DNS and bypass resistance |
+| SNP-03 | C03 | done | C02 | Private per-session egress gate, verified with HTTP/HTTPS Chromium and zero-contact fixtures |
 | SNP-04 | C04 | queued | C01 | Downloads remain quarantined until deterministic scanning and promotion |
 | SNP-05 | C05 | queued | C02 | Encrypted, registered, expiring, and revocable project browser profiles |
 | SNP-06 | C06 | queued | C05 | Authenticated same-session takeover and active-session UI |
@@ -99,7 +100,7 @@ container connection with no published ports. C03 adds the external network
 path. Artifact export, model-assisted browser calls, persistent profiles, and
 takeover stay disabled until their prerequisites are available.
 
-The [installation and acceptance procedure](trusted-core-and-isolation.md#c02-acceptance)
+The C02 installation and acceptance procedure
 passed in a disposable Linux rehearsal under Docker Desktop as both the node
 user and the root test operator. `task check` passed at 100% statement and
 branch coverage. A Linux guest running the intended systemd, Podman, crun, and
@@ -110,13 +111,30 @@ Chromium stack is sufficient for C02 acceptance.
 - make the egress gate the browser boundary's only network route;
 - authenticate the runtime to the gate without putting credentials in prompts,
   events, artifacts, or command lines;
-- resolve DNS at the gate and allow HTTP or HTTPS only for normalized approved
-  authorities and methods;
-- support HTTPS `CONNECT` without content interception;
-- disable or deny direct sockets, alternate DNS, QUIC, WebRTC, extension
-  traffic, and other bypass paths;
+- resolve DNS at the gate and validate the socket address before connecting;
+- allow GET and HEAD for approved cleartext HTTP authorities, and scope blind
+  HTTPS `CONNECT` to approved authorities;
+- deny direct sockets and alternate DNS, including bypass attempts from QUIC,
+  WebRTC, and extensions;
 - prove denied targets receive zero requests under normal, redirect, renderer,
   and worker-compromise fixtures.
+
+Keep the browser IP namespace disconnected. The broker gives each browser
+container access to a private Unix socket served by a separate gate container.
+The operator supplies the maximum origin policy and the node requests a subset
+per session. HTTPS `CONNECT` enforces the proxy request method and destination
+socket. The encrypted HTTP methods, TLS virtual host, and application behavior
+inside the tunnel are outside the gate's visibility. Approve dedicated
+endpoints that do not relay traffic or share authority with denied services.
+
+The [C03 acceptance gate](trusted-core-and-isolation.md#c03-acceptance) passed
+as an ordinary node user and root operator in a disposable Linux guest running
+systemd 259, Podman 5.7, crun 1.21, and the pinned Chromium image. The denied
+fixture recorded zero TCP or UDP contacts. The operator run verified that
+parent, worker, runtime, broker, and gate failures each ended the session and
+removed both containers. `task check` passed at 100% statement and branch
+coverage. Run the integrated gate on the intended pilot deployment before
+introducing a real account.
 
 ### C04 — `feat(artifacts): quarantine, scan, and promote browser downloads`
 
@@ -274,7 +292,7 @@ policy evaluator, audit writer, release metadata, or node identity keys.
 - controlled DNS resolution at the egress gate;
 - HTTPS `CONNECT` allow-listing by normalized destination authority without
   intercepting application content;
-- explicit denial of QUIC, WebRTC bypass, extension egress, and unsupported
+- explicit denial of QUIC, WebRTC bypass, extension bypass, and unsupported
   schemes;
 - equivalent local-fixture behavior on the primary development platform, with
   other platforms marked unsupported rather than silently weakened.

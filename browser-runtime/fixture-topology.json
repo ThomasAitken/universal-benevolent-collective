@@ -2,6 +2,7 @@
   "networks": {
     "control": {
       "external_access": false,
+      "transport": "brokered Unix stream",
       "members": [
         "trusted_node",
         "browser"
@@ -9,6 +10,7 @@
     },
     "egress": {
       "external_access": false,
+      "transport": "private Unix socket in a read-only mount",
       "members": [
         "browser",
         "egress_gate"
@@ -16,6 +18,7 @@
     },
     "fixture": {
       "external_access": false,
+      "transport": "internal Podman bridge",
       "members": [
         "egress_gate",
         "approved_fixture",
@@ -29,6 +32,7 @@
     },
     "browser": {
       "host_ports": [],
+      "ip_network": "none",
       "read_only_base": true,
       "writable_areas": [
         "runtime",

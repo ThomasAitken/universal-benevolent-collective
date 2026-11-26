@@ -8,6 +8,7 @@ import pytest
 
 from ubc_node.contracts import JsonValue
 from ubc_node.release_manifest import (
+    ISOLATION_CONTRACT_VERSION,
     PRIMARY_ISOLATION_BACKEND,
     ReleaseManifestError,
     _resolve_input,  # pyright: ignore[reportPrivateUsage]
@@ -139,7 +140,7 @@ def test_manifest_verifier_rejects_structural_and_content_changes() -> None:
     cast(dict[str, JsonValue], wrong_lock["dependency_lock"])["path"] = "other.lock"
     cases.append((wrong_lock, "dependency lock"))
     wrong_isolation = _manifest()
-    cast(dict[str, JsonValue], wrong_isolation["isolation"])["contract_version"] = 2
+    cast(dict[str, JsonValue], wrong_isolation["isolation"])["contract_version"] = 1
     cases.append((wrong_isolation, "isolation contract"))
     bool_isolation = _manifest()
     cast(dict[str, JsonValue], bool_isolation["isolation"])["contract_version"] = True
@@ -191,6 +192,10 @@ def test_manifest_schema_declares_closed_required_contract() -> None:
     schema = json.loads((_ROOT / "docs/release-manifest.schema.json").read_text())
     assert schema["additionalProperties"] is False
     assert schema["properties"]["schema_version"]["const"] == 1
+    assert (
+        schema["properties"]["isolation"]["properties"]["contract_version"]["const"]
+        == ISOLATION_CONTRACT_VERSION
+    )
     assert set(schema["properties"]["trusted_core"]["required"]) == {
         "supervisor",
         "executable_policy",
