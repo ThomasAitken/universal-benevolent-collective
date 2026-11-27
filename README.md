@@ -15,18 +15,18 @@ runnable analyses, and forecast outcomes.
 
 ## Current status
 
-The repository has a bounded single-node prototype and Linux acceptance
-fixtures for isolated Chromium and private egress. The next milestone is a
-two-cycle research pilot with public, account-free inputs. It will exercise
+The repository implements a two-cycle single-node research fixture with
 quarantined downloads, browser-assisted evidence collection, reproducible
-analysis, thesis review, and forecast resolution. After that, a small private
-multi-node alpha will test whether independent collaboration improves research
-at comparable cost.
+analysis, thesis review, and forecast scoring. The fixture runs on macOS
+with Docker Desktop and can exercise real Chromium and ClamAV on the
+intended Linux deployment. Live-source acceptance is pending.
 
+- [Single-node research pilot](docs/single-node-pilot.md)
+  describes the implemented workflow, records, and deployment boundaries.
+- [Pilot runbook](docs/pilot-runbook.md) covers setup, human review,
+  verification, and recovery.
 - [Product and architecture specification](docs/product-and-architecture-spec.md)
   defines the research portfolio, workflow, governance, and system design.
-- [Single-node research pilot roadmap](docs/single-node-pilot-roadmap.md)
-  tracks the next implementation and acceptance gates.
 - [Shared knowledge base specification](docs/knowledge-base-spec.md)
   defines the thesis model, evidence, review, and publication.
 - [Prototype reference](docs/prototype.md) and

@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from ubc_node.browser_contracts import (
+from ubc_node.browser.browser_contracts import (
     BrowserContractError,
     BrowserProfileMode,
     BrowserSessionConfig,
@@ -18,7 +18,7 @@ from ubc_node.browser_contracts import (
     normalize_origin,
     origin_for_url,
 )
-from ubc_node.contracts import JsonValue
+from ubc_node.core.contracts import JsonValue
 
 
 def test_origins_are_normalized_without_paths_or_credentials() -> None:

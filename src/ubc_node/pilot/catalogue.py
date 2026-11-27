@@ -14,10 +14,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import cast
 
-from ubc_node.contracts import EventKind, JsonValue, RunBudget, RunEvent, RunState, TaskSpec
+from ubc_node.artifacts.quarantine import DownloadQuarantine, DownloadScope
+from ubc_node.core.contracts import EventKind, JsonValue, RunBudget, RunEvent, RunState, TaskSpec
 from ubc_node.pilot.analysis_runner import AnalysisError, AnalysisRunner, PriceWindow
 from ubc_node.pilot.price_method import INTERVAL
-from ubc_node.quarantine import DownloadQuarantine, DownloadScope
 
 type Object = dict[str, JsonValue]
 

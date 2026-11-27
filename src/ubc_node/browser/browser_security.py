@@ -11,8 +11,8 @@ from time import monotonic
 from typing import cast
 from urllib.parse import urlsplit
 
-from ubc_node.browser_contracts import BrowserContractError, origin_for_url
-from ubc_node.contracts import JsonValue
+from ubc_node.browser.browser_contracts import BrowserContractError, origin_for_url
+from ubc_node.core.contracts import JsonValue
 
 type BoundaryEventSink = Callable[[str, Mapping[str, JsonValue]], None]
 type Clock = Callable[[], float]

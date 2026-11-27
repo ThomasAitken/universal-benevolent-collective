@@ -11,20 +11,25 @@ from pathlib import Path
 from typing import NoReturn
 
 from ubc_node import __version__
-from ubc_node.agent_backend import StructuredAgentBackend
-from ubc_node.browser_research import (
+from ubc_node.artifacts.quarantine import (
+    ClamAVScanner,
+    DownloadQuarantine,
+    DownloadScope,
+    load_canaries,
+)
+from ubc_node.browser.isolation.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
+from ubc_node.core.contracts import RunBudget, RunState, TaskSpec
+from ubc_node.core.event_log import JsonlEventLog
+from ubc_node.demos.demo import DemoCancelled, DemoError, run_phase5_demo
+from ubc_node.pilot.browser_research import (
     RESEARCH_INSTRUCTION,
     RESEARCH_SCHEMA,
     run_browser_research,
     validate_research_inventory,
 )
-from ubc_node.contracts import RunBudget, RunState, TaskSpec
-from ubc_node.demo import DemoCancelled, DemoError, run_phase5_demo
-from ubc_node.event_log import JsonlEventLog
-from ubc_node.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
-from ubc_node.openai_backend import OpenAIModelProvider, OpenAIProviderConfig
-from ubc_node.quarantine import ClamAVScanner, DownloadQuarantine, DownloadScope, load_canaries
-from ubc_node.release_manifest import (
+from ubc_node.providers.agent_backend import StructuredAgentBackend
+from ubc_node.providers.openai_backend import OpenAIModelProvider, OpenAIProviderConfig
+from ubc_node.release.release_manifest import (
     ReleaseManifestError,
     create_release_manifest,
     verify_release_manifest,

@@ -427,7 +427,7 @@ isolated-browser fixtures verify destination control and failure cleanup.
 The demonstration exercises policy, audit and evidence capture. These are the
 foundations for integrated research use.
 [Prototype reference](prototype.md) ·
-[Single-node pilot roadmap](single-node-pilot-roadmap.md)
+[Single-node research pilot](single-node-pilot.md)
 
 ### Phase 1 — Single-node research pilot
 

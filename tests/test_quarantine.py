@@ -16,15 +16,15 @@ import pytest
 
 from tests.clamd_fixture import clamd_fixture as clamd_fixture
 from tests.clamd_fixture import read_scan, scanner_for
-from ubc_node import quarantine
-from ubc_node.cli import run
-from ubc_node.quarantine import (
+from ubc_node.artifacts import quarantine
+from ubc_node.artifacts.quarantine import (
     ClamAVScanner,
     DownloadQuarantine,
     DownloadRejected,
     DownloadScope,
     load_canaries,
 )
+from ubc_node.cli import run
 
 _HEADER = b"interval_utc,region,price\n"
 _CLEAN = _HEADER + b"2026-01-01T00:00:00Z,NSW1,-12.3\n"

@@ -24,7 +24,7 @@ and supervised browser demos remain development fixtures. A disposable Linux
 guest running the specified stack can supply local acceptance evidence.
 Repeat the integrated browser and egress gates on the intended Linux pilot
 deployment before live retrieval. Linux launch failures are terminal.
-[Pilot acceptance](single-node-pilot-roadmap.md#c07--integrated-pilot-and-acceptance)
+[Pilot deployment procedure](pilot-runbook.md#intended-linux-deployment)
 
 ## Trusted core
 

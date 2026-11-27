@@ -14,25 +14,29 @@ from uuid import uuid4
 import pytest
 
 from tests.egress_fixture import APPROVED, DENIED, DENIED_IP, DENIED_PORT, HTTP_PORT, TLS_PORT
-from ubc_node.agent_backend import (
+from ubc_node.browser.browser_contracts import BrowserSession, BrowserSessionState
+from ubc_node.browser.isolation.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
+from ubc_node.browser.isolation.isolation_contracts import (
+    BoundaryChannelKind,
+    ChannelCapability,
+    IsolatedBrowserLaunchSpec,
+)
+from ubc_node.browser.stagehand_browser import NavigationPolicyError
+from ubc_node.browser.supervised_browser import BrowserWorkerError
+from ubc_node.core.contracts import EventKind, JsonValue, RunState, TaskSpec
+from ubc_node.core.event_log import JsonlEventLog
+from ubc_node.pilot.browser_research import (
+    RESEARCH_INSTRUCTION,
+    RESEARCH_SCHEMA,
+    run_browser_research,
+)
+from ubc_node.providers.agent_backend import (
     ModelPricing,
     ModelResponse,
     ProposalRequest,
     StructuredAgentBackend,
 )
-from ubc_node.browser_contracts import BrowserSession, BrowserSessionState
-from ubc_node.browser_research import RESEARCH_INSTRUCTION, RESEARCH_SCHEMA, run_browser_research
-from ubc_node.contracts import EventKind, JsonValue, RunState, TaskSpec
-from ubc_node.event_log import JsonlEventLog
-from ubc_node.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
-from ubc_node.isolation_contracts import (
-    BoundaryChannelKind,
-    ChannelCapability,
-    IsolatedBrowserLaunchSpec,
-)
-from ubc_node.release_manifest import load_release_manifest
-from ubc_node.stagehand_browser import NavigationPolicyError
-from ubc_node.supervised_browser import BrowserWorkerError
+from ubc_node.release.release_manifest import load_release_manifest
 
 pytestmark = [
     pytest.mark.isolated_browser,
@@ -340,7 +344,8 @@ assert len(Path("/proc/net/route").read_text().splitlines()) == 1
 assert not Path(sys.argv[1]).exists()
 for path in ("/run/podman/podman.sock", "/var/run/docker.sock", "/proc/1/root/run/ubc-browser"):
     assert not Path(path).exists()
-assert not os.access("/opt/ubc/app/src/ubc_node/policy.py", os.W_OK)
+policy = Path("/opt/ubc/app/src/ubc_node/core/policy.py")
+assert policy.is_file() and not os.access(policy, os.W_OK)
 assert os.statvfs("/").f_flag & os.ST_RDONLY
 for path in ("/run/ubc", "/var/lib/ubc/profile", "/var/lib/ubc/quarantine"):
     probe = Path(path) / "write-proof"

@@ -10,7 +10,7 @@ import pytest
 from ubc_node import __version__
 from ubc_node import cli as cli_module
 from ubc_node.cli import main, run
-from ubc_node.demo import DemoCancelled, DemoError, Phase5DemoResult
+from ubc_node.demos.demo import DemoCancelled, DemoError, Phase5DemoResult
 
 
 def test_default_command_prints_help(capsys: pytest.CaptureFixture[str]) -> None:
@@ -187,7 +187,7 @@ def test_research_command_uses_private_audit_and_verified_runtime(
 ) -> None:
     from unittest.mock import AsyncMock
 
-    from ubc_node.contracts import BudgetUsage, RunResult, RunState
+    from ubc_node.core.contracts import BudgetUsage, RunResult, RunState
 
     journal = tmp_path / "run.jsonl"
     state = RunState.COMPLETED if completed else RunState.FAILED

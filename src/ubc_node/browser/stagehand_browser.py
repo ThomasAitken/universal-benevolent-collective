@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, create_model
 
-from ubc_node.browser_contracts import (
+from ubc_node.browser.browser_contracts import (
     ArtifactRef,
     BrowserContractError,
     BrowserProfileMode,
@@ -27,21 +27,21 @@ from ubc_node.browser_contracts import (
     TabInfo,
     origin_for_url,
 )
-from ubc_node.contracts import (
-    ActionKind,
-    ActionProposal,
-    FatalRunError,
-    HumanHandoff,
-    JsonValue,
-    TaskSpec,
-)
-from ubc_node.takeover import (
+from ubc_node.browser.takeover import (
     ClipboardClearer,
     TakeoverDecision,
     TakeoverHandler,
     TakeoverOutcome,
     TakeoverPromptContext,
     clear_system_clipboard,
+)
+from ubc_node.core.contracts import (
+    ActionKind,
+    ActionProposal,
+    FatalRunError,
+    HumanHandoff,
+    JsonValue,
+    TaskSpec,
 )
 
 

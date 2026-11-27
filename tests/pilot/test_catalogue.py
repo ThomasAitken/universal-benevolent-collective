@@ -15,12 +15,12 @@ from tests.clamd_fixture import clamd_fixture as clamd_fixture
 from tests.clamd_fixture import scanner_for
 from tests.pilot.fixtures import AUTHOR, BASE, HEADER, OUTCOME, SOURCE, START, WINDOW
 from tests.pilot.fixtures import draft_thesis as _draft
-from ubc_node import quarantine
+from ubc_node.artifacts import quarantine
+from ubc_node.artifacts.quarantine import DownloadQuarantine, DownloadScope
 from ubc_node.pilot.analysis_runner import AnalysisError, AnalysisRunner, PriceWindow
 from ubc_node.pilot.catalogue import Record, ResearchCatalogue, digest, object_value
 from ubc_node.pilot.forecasts import freeze_question, resolve_forecast, submit_forecast
 from ubc_node.pilot.thesis_review import Decision, ThesisReview
-from ubc_node.quarantine import DownloadQuarantine, DownloadScope
 
 
 @dataclass

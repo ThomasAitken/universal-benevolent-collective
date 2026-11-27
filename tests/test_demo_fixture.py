@@ -7,7 +7,7 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 
 import pytest
 
-from ubc_node.demo_fixture import Phase5FixtureSite
+from ubc_node.demos.demo_fixture import Phase5FixtureSite
 
 
 def _read(url: str) -> str:

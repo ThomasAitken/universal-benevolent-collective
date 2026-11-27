@@ -10,7 +10,7 @@ from tests.fakes import (
     ScriptedAgentBackend,
     ScriptedPolicyEvaluator,
 )
-from ubc_node.contracts import (
+from ubc_node.core.contracts import (
     ActionProposal,
     EventKind,
     HumanHandoff,

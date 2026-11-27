@@ -9,8 +9,14 @@ from hashlib import sha256
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-from ubc_node.browser_contracts import BrowserSession, BrowserSessionState, origin_for_url
-from ubc_node.contracts import (
+from ubc_node.browser.browser_contracts import BrowserSession, BrowserSessionState, origin_for_url
+from ubc_node.browser.isolation.isolation_contracts import (
+    BoundaryChannelKind,
+    ChannelCapability,
+    IsolatedBrowserLaunchSpec,
+    IsolatedBrowserRuntime,
+)
+from ubc_node.core.contracts import (
     ActionKind,
     ActionProposal,
     AgentBackend,
@@ -23,14 +29,8 @@ from ubc_node.contracts import (
     RunResult,
     TaskSpec,
 )
-from ubc_node.isolation_contracts import (
-    BoundaryChannelKind,
-    ChannelCapability,
-    IsolatedBrowserLaunchSpec,
-    IsolatedBrowserRuntime,
-)
-from ubc_node.policy import PrototypePolicyConfig, PrototypePolicyEvaluator
-from ubc_node.supervisor import RunSupervisor
+from ubc_node.core.policy import PrototypePolicyConfig, PrototypePolicyEvaluator
+from ubc_node.core.supervisor import RunSupervisor
 
 _MAX_CONTENT_CHARS = 8_000
 _MAX_TITLE_CHARS = 512

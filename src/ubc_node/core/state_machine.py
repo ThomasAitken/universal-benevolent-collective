@@ -1,6 +1,6 @@
 """Explicit lifecycle transitions for one bounded agent run."""
 
-from ubc_node.contracts import RunState
+from ubc_node.core.contracts import RunState
 
 
 class InvalidTransitionError(ValueError):

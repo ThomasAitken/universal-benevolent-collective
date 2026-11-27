@@ -6,8 +6,8 @@ from typing import cast
 
 import pytest
 
-from ubc_node.contracts import JsonValue
-from ubc_node.release_manifest import (
+from ubc_node.core.contracts import JsonValue
+from ubc_node.release.release_manifest import (
     ISOLATION_CONTRACT_VERSION,
     PRIMARY_ISOLATION_BACKEND,
     ReleaseManifestError,
@@ -216,11 +216,11 @@ def test_browser_context_digest_tracks_nested_src_files_and_ignores_caches(
         "uv.lock",
         "browser-runtime/Dockerfile",
         "browser-runtime/Dockerfile.dockerignore",
-        "src/ubc_node/supervisor.py",
-        "src/ubc_node/policy.py",
-        "src/ubc_node/event_log.py",
-        "src/ubc_node/node_keys.py",
-        "src/ubc_node/quarantine.py",
+        "src/ubc_node/core/supervisor.py",
+        "src/ubc_node/core/policy.py",
+        "src/ubc_node/core/event_log.py",
+        "src/ubc_node/release/node_keys.py",
+        "src/ubc_node/artifacts/quarantine.py",
         "src/ubc_node/py.typed",
     ):
         file_path = tmp_path / relative_path

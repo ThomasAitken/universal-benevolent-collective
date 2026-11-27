@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from ubc_node.browser_security import (
+from ubc_node.browser.browser_security import (
     EgressGate,
     EgressGateError,
     JsonlBoundaryAudit,
@@ -18,8 +18,8 @@ from ubc_node.browser_security import (
     SessionLease,
     SessionLeaseError,
 )
-from ubc_node.contracts import JsonValue
-from ubc_node.demo_fixture import Phase5FixtureSite
+from ubc_node.core.contracts import JsonValue
+from ubc_node.demos.demo_fixture import Phase5FixtureSite
 
 
 class _Clock:

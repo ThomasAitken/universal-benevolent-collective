@@ -8,13 +8,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import cast
 
-from ubc_node.browser_contracts import BrowserSessionConfig, BrowserSessionState
-from ubc_node.browser_security import LeaseConfig, SessionLease
-from ubc_node.contracts import JsonValue
-from ubc_node.isolated_browser import ISOLATED_OPERATIONS
-from ubc_node.isolated_egress import tunnel
-from ubc_node.stagehand_browser import StagehandBrowserAdapter
-from ubc_node.supervised_browser import (
+from ubc_node.browser.browser_contracts import BrowserSessionConfig, BrowserSessionState
+from ubc_node.browser.browser_security import LeaseConfig, SessionLease
+from ubc_node.browser.isolation.isolated_browser import ISOLATED_OPERATIONS
+from ubc_node.browser.isolation.isolated_egress import tunnel
+from ubc_node.browser.stagehand_browser import StagehandBrowserAdapter
+from ubc_node.browser.supervised_browser import (
     WORKER_PROTOCOL_VERSION,
     BrowserWorkerError,
     BrowserWorkerService,
@@ -22,6 +21,7 @@ from ubc_node.supervised_browser import (
     read_worker_frame,
     write_worker_frame,
 )
+from ubc_node.core.contracts import JsonValue
 
 _GATE_SOCKET = Path("/run/ubc-egress/proxy.sock")
 _CHROMIUM_ARGS = (

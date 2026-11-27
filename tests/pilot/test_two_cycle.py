@@ -23,8 +23,8 @@ from tests.pilot.run_fixture import (
     FixtureScanner,
     main,
 )
-from ubc_node.browser_contracts import BrowserSession, BrowserSessionState
-from ubc_node.isolated_browser import PodmanBrowserRuntime
+from ubc_node.browser.browser_contracts import BrowserSession, BrowserSessionState
+from ubc_node.browser.isolation.isolated_browser import PodmanBrowserRuntime
 from ubc_node.pilot.analysis_runner import AnalysisRunner
 from ubc_node.pilot.forecasts import resolve_forecast
 

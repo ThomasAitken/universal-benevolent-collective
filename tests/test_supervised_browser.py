@@ -14,8 +14,8 @@ from typing import Any, cast
 
 import pytest
 
-from ubc_node import supervised_browser as supervised_module
-from ubc_node.browser_contracts import (
+from ubc_node.browser import supervised_browser as supervised_module
+from ubc_node.browser.browser_contracts import (
     ArtifactRef,
     BrowserContractError,
     BrowserProfileMode,
@@ -29,10 +29,9 @@ from ubc_node.browser_contracts import (
     PersistencePolicyDecision,
     TabInfo,
 )
-from ubc_node.browser_security import LeaseConfig, SessionLease
-from ubc_node.contracts import ActionProposal, HumanHandoff, JsonValue, TaskSpec
-from ubc_node.stagehand_browser import NavigationPolicyError
-from ubc_node.supervised_browser import (
+from ubc_node.browser.browser_security import LeaseConfig, SessionLease
+from ubc_node.browser.stagehand_browser import NavigationPolicyError
+from ubc_node.browser.supervised_browser import (
     BrowserWorkerError,
     BrowserWorkerService,
     SupervisedBrowserSession,
@@ -53,6 +52,7 @@ from ubc_node.supervised_browser import (
     read_worker_frame,
     write_worker_frame,
 )
+from ubc_node.core.contracts import ActionProposal, HumanHandoff, JsonValue, TaskSpec
 
 
 def _inspection_record() -> dict[str, JsonValue]:
@@ -736,7 +736,7 @@ def test_spawn_worker_builds_private_fd_command(monkeypatch: pytest.MonkeyPatch)
         seen.update(kwargs)
         return StubProcess()
 
-    monkeypatch.setattr("ubc_node.supervised_browser.subprocess.Popen", fake_popen)
+    monkeypatch.setattr("ubc_node.browser.supervised_browser.subprocess.Popen", fake_popen)
     process = _spawn_worker(9)
     assert isinstance(process, StubProcess)
     assert seen["pass_fds"] == (9,)

@@ -6,15 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from ubc_node.agent_backend import (
-    ModelPricing,
-    ModelResponse,
-    ProposalRequest,
-    StructuredAgentBackend,
-    parse_action_proposal,
-    render_proposal_prompt,
-)
-from ubc_node.contracts import (
+from ubc_node.core.contracts import (
     ActionKind,
     AgentBackendError,
     EventKind,
@@ -23,6 +15,14 @@ from ubc_node.contracts import (
     RunEvent,
     RunState,
     TaskSpec,
+)
+from ubc_node.providers.agent_backend import (
+    ModelPricing,
+    ModelResponse,
+    ProposalRequest,
+    StructuredAgentBackend,
+    parse_action_proposal,
+    render_proposal_prompt,
 )
 
 NOW = datetime(2026, 11, 21, 5, 0, tzinfo=UTC)

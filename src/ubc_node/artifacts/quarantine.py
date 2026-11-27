@@ -19,7 +19,7 @@ from time import monotonic
 from typing import cast
 from uuid import uuid4
 
-from ubc_node.browser_contracts import origin_for_url
+from ubc_node.browser.browser_contracts import origin_for_url
 
 MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024
 _CHUNK_BYTES = 64 * 1024

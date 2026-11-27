@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from ubc_node.contracts import EventKind, RunEvent, RunState
-from ubc_node.event_log import EventLogError, JsonlEventLog
+from ubc_node.core.contracts import EventKind, RunEvent, RunState
+from ubc_node.core.event_log import EventLogError, JsonlEventLog
 
 
 def _event(sequence: int) -> RunEvent:

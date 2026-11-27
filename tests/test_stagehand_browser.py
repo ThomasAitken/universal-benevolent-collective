@@ -14,7 +14,7 @@ from tests.browser_fakes import (
     FakePage,
     FakeStagehand,
 )
-from ubc_node.browser_contracts import (
+from ubc_node.browser.browser_contracts import (
     BrowserContractError,
     BrowserSessionConfig,
     BrowserSessionState,
@@ -23,8 +23,7 @@ from ubc_node.browser_contracts import (
     ExtractionType,
     InteractionKind,
 )
-from ubc_node.contracts import ActionProposal, HumanHandoff, JsonValue, TaskSpec
-from ubc_node.stagehand_browser import (
+from ubc_node.browser.stagehand_browser import (
     BrowserSessionError,
     BrowserSessionInactiveError,
     DownloadError,
@@ -35,13 +34,14 @@ from ubc_node.stagehand_browser import (
     _BrowserLike,  # pyright: ignore[reportPrivateUsage]
     _StagehandLike,  # pyright: ignore[reportPrivateUsage]
 )
-from ubc_node.takeover import (
+from ubc_node.browser.takeover import (
     ClipboardClearer,
     TakeoverDecision,
     TakeoverHandler,
     TakeoverOutcome,
     TakeoverPromptContext,
 )
+from ubc_node.core.contracts import ActionProposal, HumanHandoff, JsonValue, TaskSpec
 
 ORIGIN = "https://fixture.test"
 HANDOFF = HumanHandoff("Sign in", ORIGIN, "Complete the fake verification")

@@ -6,11 +6,11 @@ from pathlib import Path
 import pytest
 
 from tests.browser_fixture import BrowserFixtureSite
-from ubc_node.browser_contracts import BrowserSessionConfig, BrowserSessionState
-from ubc_node.contracts import JsonValue
-from ubc_node.demo_fixture import Phase5FixtureSite
-from ubc_node.stagehand_browser import NavigationPolicyError, StagehandBrowserAdapter
-from ubc_node.supervised_browser import SupervisedBrowserSession
+from ubc_node.browser.browser_contracts import BrowserSessionConfig, BrowserSessionState
+from ubc_node.browser.stagehand_browser import NavigationPolicyError, StagehandBrowserAdapter
+from ubc_node.browser.supervised_browser import SupervisedBrowserSession
+from ubc_node.core.contracts import JsonValue
+from ubc_node.demos.demo_fixture import Phase5FixtureSite
 
 
 @pytest.mark.browser

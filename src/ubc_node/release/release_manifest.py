@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import cast
 
-from ubc_node.contracts import JsonValue
+from ubc_node.core.contracts import JsonValue
 
 MANIFEST_SCHEMA_VERSION = 1
 ISOLATION_CONTRACT_VERSION = 2
@@ -14,16 +14,19 @@ PRIMARY_ISOLATION_BACKEND = "linux-rootful-podman-service"
 _HEX_DIGITS = frozenset("0123456789abcdef")
 
 _CORE_COMPONENTS: Mapping[str, tuple[str, str]] = {
-    "supervisor": ("src/ubc_node/supervisor.py", "ubc_node.supervisor:RunSupervisor"),
+    "supervisor": ("src/ubc_node/core/supervisor.py", "ubc_node.core.supervisor:RunSupervisor"),
     "executable_policy": (
-        "src/ubc_node/policy.py",
-        "ubc_node.policy:PrototypePolicyEvaluator",
+        "src/ubc_node/core/policy.py",
+        "ubc_node.core.policy:PrototypePolicyEvaluator",
     ),
-    "audit_writer": ("src/ubc_node/event_log.py", "ubc_node.event_log:JsonlEventLog"),
-    "node_key_interface": ("src/ubc_node/node_keys.py", "ubc_node.node_keys:NodeKey"),
+    "audit_writer": ("src/ubc_node/core/event_log.py", "ubc_node.core.event_log:JsonlEventLog"),
+    "node_key_interface": (
+        "src/ubc_node/release/node_keys.py",
+        "ubc_node.release.node_keys:NodeKey",
+    ),
     "download_quarantine": (
-        "src/ubc_node/quarantine.py",
-        "ubc_node.quarantine:DownloadQuarantine",
+        "src/ubc_node/artifacts/quarantine.py",
+        "ubc_node.artifacts.quarantine:DownloadQuarantine",
     ),
 }
 _BROWSER_STATIC_INPUTS = (

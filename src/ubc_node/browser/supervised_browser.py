@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Protocol, cast
 from uuid import uuid4
 
-from ubc_node.browser_contracts import (
+from ubc_node.browser.browser_contracts import (
     ArtifactRef,
     BrowserContractError,
     BrowserProfileMode,
@@ -29,20 +29,20 @@ from ubc_node.browser_contracts import (
     PageInspection,
     TabInfo,
 )
-from ubc_node.browser_security import (
+from ubc_node.browser.browser_security import (
     BoundaryEventSink,
     EgressGate,
     LeaseConfig,
     SessionLease,
     SessionLeaseError,
 )
-from ubc_node.contracts import ActionKind, ActionProposal, HumanHandoff, JsonValue, TaskSpec
-from ubc_node.stagehand_browser import (
+from ubc_node.browser.stagehand_browser import (
     BrowserSessionError,
     NavigationPolicyError,
     StagehandBrowserAdapter,
 )
-from ubc_node.takeover import CliTakeoverHandler
+from ubc_node.browser.takeover import CliTakeoverHandler
+from ubc_node.core.contracts import ActionKind, ActionProposal, HumanHandoff, JsonValue, TaskSpec
 
 WORKER_PROTOCOL_VERSION = 1
 _MAX_MESSAGE_BYTES = 1024 * 1024
@@ -678,7 +678,7 @@ def _spawn_worker(fd: int) -> subprocess.Popen[bytes]:
         [
             sys.executable,
             "-m",
-            "ubc_node.supervised_browser",
+            "ubc_node.browser.supervised_browser",
             "--worker-fd",
             str(fd),
         ],

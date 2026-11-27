@@ -12,21 +12,21 @@ from typing import Protocol, Self, cast
 
 import httpx
 
-from ubc_node.agent_backend import ProposalRequest, StructuredModelProvider
-from ubc_node.browser_contracts import (
+from ubc_node.browser.browser_contracts import (
     BrowserProfileMode,
     BrowserSessionConfig,
     PageInspection,
     PersistencePolicyDecision,
     origin_for_url,
 )
-from ubc_node.browser_security import JsonlBoundaryAudit
-from ubc_node.contracts import ActionProposal, HumanHandoff, JsonValue, PolicyOutcome, TaskSpec
-from ubc_node.demo_fixture import Phase5FixtureSite
-from ubc_node.policy import PrototypePolicyConfig, PrototypePolicyEvaluator
-from ubc_node.stagehand_browser import NavigationPolicyError, StagehandBrowserAdapter
-from ubc_node.supervised_browser import SupervisedBrowserSession
-from ubc_node.takeover import CliTakeoverHandler, TakeoverHandler
+from ubc_node.browser.browser_security import JsonlBoundaryAudit
+from ubc_node.browser.stagehand_browser import NavigationPolicyError, StagehandBrowserAdapter
+from ubc_node.browser.supervised_browser import SupervisedBrowserSession
+from ubc_node.browser.takeover import CliTakeoverHandler, TakeoverHandler
+from ubc_node.core.contracts import ActionProposal, HumanHandoff, JsonValue, PolicyOutcome, TaskSpec
+from ubc_node.core.policy import PrototypePolicyConfig, PrototypePolicyEvaluator
+from ubc_node.demos.demo_fixture import Phase5FixtureSite
+from ubc_node.providers.agent_backend import ProposalRequest, StructuredModelProvider
 
 _DEMO_VERSION = 1
 _FACT_PATTERN = re.compile(r"FACT:\s*([^\n]+)")
@@ -736,7 +736,7 @@ def create_demo_report_model(
             raise ValueError("--base-url is only valid with the openai provider")
         return LocalDemoReportModel()
     if provider_name == "openai":
-        from ubc_node.openai_backend import OpenAIModelProvider, OpenAIProviderConfig
+        from ubc_node.providers.openai_backend import OpenAIModelProvider, OpenAIProviderConfig
 
         config = OpenAIProviderConfig.from_env(model=model)
         if base_url is not None:
@@ -746,7 +746,7 @@ def create_demo_report_model(
     if provider_name == "gemini":
         if base_url is not None:
             raise ValueError("--base-url is only valid with the openai provider")
-        from ubc_node.gemini_backend import GeminiModelProvider, GeminiProviderConfig
+        from ubc_node.providers.gemini_backend import GeminiModelProvider, GeminiProviderConfig
 
         config = GeminiProviderConfig.from_env(model=model)
         provider = GeminiModelProvider(config)

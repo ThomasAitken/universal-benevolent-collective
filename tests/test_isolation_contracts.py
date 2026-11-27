@@ -8,8 +8,8 @@ from typing import get_type_hints
 
 import pytest
 
-from ubc_node import isolation_contracts as isolation_module
-from ubc_node.isolation_contracts import (
+from ubc_node.browser.isolation import isolation_contracts as isolation_module
+from ubc_node.browser.isolation.isolation_contracts import (
     BoundaryChannelKind,
     BoundaryEvent,
     ChannelCapability,
@@ -52,7 +52,7 @@ def test_launch_spec_normalizes_origins_and_preserves_least_authority() -> None:
     hints = get_type_hints(IsolatedBrowserRuntime.launch)
     assert Path not in hints.values()
     source = inspect.getsource(isolation_module)
-    assert "ubc_node.node_keys" not in source
+    assert "ubc_node.release.node_keys" not in source
     assert "EventSink" not in source
 
 

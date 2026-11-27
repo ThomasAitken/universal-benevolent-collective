@@ -11,8 +11,12 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Protocol
 
-from ubc_node.browser_contracts import BrowserContractError, BrowserSession, normalize_origin
-from ubc_node.contracts import JsonValue
+from ubc_node.browser.browser_contracts import (
+    BrowserContractError,
+    BrowserSession,
+    normalize_origin,
+)
+from ubc_node.core.contracts import JsonValue
 
 _HEX_DIGITS = frozenset("0123456789abcdef")
 _MAX_IDENTIFIER_LENGTH = 128

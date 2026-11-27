@@ -9,13 +9,13 @@ from typing import Literal, Self, cast
 
 import httpx
 
-from ubc_node.agent_backend import (
+from ubc_node.core.contracts import AgentBackendError, JsonValue
+from ubc_node.providers.agent_backend import (
     ModelPricing,
     ModelResponse,
     ProposalRequest,
     StructuredAgentBackend,
 )
-from ubc_node.contracts import AgentBackendError, JsonValue
 
 DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 

@@ -2,8 +2,8 @@
 
 import pytest
 
-from ubc_node.contracts import RunState
-from ubc_node.state_machine import InvalidTransitionError, RunStateMachine
+from ubc_node.core.contracts import RunState
+from ubc_node.core.state_machine import InvalidTransitionError, RunStateMachine
 
 
 def test_handoff_lifecycle_can_resume_and_complete() -> None:

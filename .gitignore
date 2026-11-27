@@ -29,6 +29,7 @@ tmp/
 # UBC runtime state must never be committed
 .ubc/
 artifacts/
+!/src/ubc_node/artifacts/
 browser-data/
 downloads/
 workspaces/

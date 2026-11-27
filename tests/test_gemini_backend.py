@@ -11,31 +11,31 @@ import pytest
 
 from tests.browser_fakes import FakeBrowser, FakeContext, FakePage, FakeStagehand
 from tests.fakes import MemoryEventSink, ScriptedPolicyEvaluator
-from ubc_node.agent_backend import (
-    PROPOSAL_JSON_SCHEMA,
-    PROPOSAL_SYSTEM_INSTRUCTION,
-    ModelPricing,
-    ProposalRequest,
+from ubc_node.browser.browser_contracts import BrowserSessionConfig
+from ubc_node.browser.stagehand_browser import (
+    StagehandBrowserAdapter,
+    _BrowserLike,  # pyright: ignore[reportPrivateUsage]
+    _StagehandLike,  # pyright: ignore[reportPrivateUsage]
 )
-from ubc_node.browser_contracts import BrowserSessionConfig
-from ubc_node.contracts import (
+from ubc_node.core.contracts import (
     AgentBackendError,
     EventKind,
     JsonValue,
     RunState,
     TaskSpec,
 )
-from ubc_node.gemini_backend import (
+from ubc_node.core.supervisor import RunSupervisor
+from ubc_node.providers.agent_backend import (
+    PROPOSAL_JSON_SCHEMA,
+    PROPOSAL_SYSTEM_INSTRUCTION,
+    ModelPricing,
+    ProposalRequest,
+)
+from ubc_node.providers.gemini_backend import (
     GeminiModelProvider,
     GeminiProviderConfig,
     create_gemini_agent_backend,
 )
-from ubc_node.stagehand_browser import (
-    StagehandBrowserAdapter,
-    _BrowserLike,  # pyright: ignore[reportPrivateUsage]
-    _StagehandLike,  # pyright: ignore[reportPrivateUsage]
-)
-from ubc_node.supervisor import RunSupervisor
 
 NOW = datetime(2026, 11, 21, 5, 0, tzinfo=UTC)
 TASK = TaskSpec("task-1", "Research the fixture site", metadata={"origin": "https://fixture.test"})

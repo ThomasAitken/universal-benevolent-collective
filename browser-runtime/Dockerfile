@@ -41,4 +41,4 @@ RUN uv sync --frozen --no-dev \
 USER 65532:65532
 
 # The Linux launcher supplies a private control descriptor and egress endpoint.
-ENTRYPOINT ["python", "-m", "ubc_node.isolated_worker"]
+ENTRYPOINT ["python", "-m", "ubc_node.browser.isolation.isolated_worker"]

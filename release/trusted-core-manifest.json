@@ -1,7 +1,7 @@
 {
   "browser_image": {
-    "build_context_sha256": "sha256:c84dfd8fb8b475e996448e9db2e80949773b2abf9805d034d98471d6c2118d1a",
-    "digest": "sha256:3f38d3e213f066eef7e46d5187bfbbd44f3e9becdf5d8f0ff096bd26428e0335",
+    "build_context_sha256": "sha256:be6c3330fc522201d8f0a7de7888ffe227ce65312423240523dcd1f2946a784b",
+    "digest": "sha256:4566d2bd07d73ed3a557eef84dfba4cb415cede598de0ee57936495caa0cdd5c",
     "reference": "localhost/ubc-browser"
   },
   "constitution": {
@@ -17,33 +17,33 @@
     "backend": "linux-rootful-podman-service",
     "contract_version": 2
   },
-  "release_id": "0.1.0-c07",
+  "release_id": "0.1.0-pilot-cleanup",
   "schema_version": 1,
   "trusted_core": {
     "audit_writer": {
-      "entrypoint": "ubc_node.event_log:JsonlEventLog",
-      "path": "src/ubc_node/event_log.py",
-      "sha256": "sha256:b055b36095036f1969828c1c66091a58300520c1c811664c49e4eb849a3e14df"
+      "entrypoint": "ubc_node.core.event_log:JsonlEventLog",
+      "path": "src/ubc_node/core/event_log.py",
+      "sha256": "sha256:dad3c045f9918a85bb4841cfd3ac688b68c20fab3ca637aa43d03f96a9f60eff"
     },
     "download_quarantine": {
-      "entrypoint": "ubc_node.quarantine:DownloadQuarantine",
-      "path": "src/ubc_node/quarantine.py",
-      "sha256": "sha256:dfd1ba5dddeed13e903a044a2fbc8fb78892be781ef073993e6826b6519d1b65"
+      "entrypoint": "ubc_node.artifacts.quarantine:DownloadQuarantine",
+      "path": "src/ubc_node/artifacts/quarantine.py",
+      "sha256": "sha256:08a35d41d3c08306c5ac91b18bfd9b741c7db6aa3ef2568565d04c2ee263be0f"
     },
     "executable_policy": {
-      "entrypoint": "ubc_node.policy:PrototypePolicyEvaluator",
-      "path": "src/ubc_node/policy.py",
-      "sha256": "sha256:996c510cd3de505494e353fe56a9edac461b6b8c51de182012dafecfed968470"
+      "entrypoint": "ubc_node.core.policy:PrototypePolicyEvaluator",
+      "path": "src/ubc_node/core/policy.py",
+      "sha256": "sha256:4b34f9fcc9b8191f9a80864256a03686c8dcf0d89c1026cc5c46eaef4aefa86b"
     },
     "node_key_interface": {
-      "entrypoint": "ubc_node.node_keys:NodeKey",
-      "path": "src/ubc_node/node_keys.py",
+      "entrypoint": "ubc_node.release.node_keys:NodeKey",
+      "path": "src/ubc_node/release/node_keys.py",
       "sha256": "sha256:9707d63edef2ed4537c5d4e7f5763937662814dca19b2114a63530ab7d398530"
     },
     "supervisor": {
-      "entrypoint": "ubc_node.supervisor:RunSupervisor",
-      "path": "src/ubc_node/supervisor.py",
-      "sha256": "sha256:b9d20cffbb4470772159422f117da9e21ee18e9506961c119067b7514304c126"
+      "entrypoint": "ubc_node.core.supervisor:RunSupervisor",
+      "path": "src/ubc_node/core/supervisor.py",
+      "sha256": "sha256:0c1bfea857910561ff902be0069b355e9a93d67ad30c5c0a63ac5decb2dc3676"
     }
   }
 }

@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from ubc_node.contracts import (
+from ubc_node.core.contracts import (
     ActionKind,
     ActionProposal,
     ActionRisk,

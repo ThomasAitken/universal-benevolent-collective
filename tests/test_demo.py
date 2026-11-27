@@ -10,10 +10,10 @@ from typing import Any, cast
 import httpx
 import pytest
 
-from ubc_node import demo as demo_module
-from ubc_node.agent_backend import ModelPricing, ModelResponse, ProposalRequest
-from ubc_node.browser_contracts import BrowserSessionConfig, PageInspection
-from ubc_node.contracts import (
+from ubc_node.browser.browser_contracts import BrowserSessionConfig, PageInspection
+from ubc_node.browser.stagehand_browser import NavigationPolicyError, StagehandBrowserAdapter
+from ubc_node.browser.takeover import TakeoverDecision, TakeoverOutcome, TakeoverPromptContext
+from ubc_node.core.contracts import (
     ActionProposal,
     HumanHandoff,
     JsonValue,
@@ -21,7 +21,8 @@ from ubc_node.contracts import (
     PolicyOutcome,
     TaskSpec,
 )
-from ubc_node.demo import (
+from ubc_node.demos import demo as demo_module
+from ubc_node.demos.demo import (
     DemoBrowser,
     DemoCancellationToken,
     DemoCancelled,
@@ -38,8 +39,7 @@ from ubc_node.demo import (
     create_demo_report_model,
     run_phase5_demo,
 )
-from ubc_node.stagehand_browser import NavigationPolicyError, StagehandBrowserAdapter
-from ubc_node.takeover import TakeoverDecision, TakeoverOutcome, TakeoverPromptContext
+from ubc_node.providers.agent_backend import ModelPricing, ModelResponse, ProposalRequest
 
 ORIGIN = "https://fixture.test"
 CANARY = "secret-canary-never-persist"

@@ -8,7 +8,7 @@ from types import MappingProxyType
 from typing import Protocol
 from urllib.parse import urlsplit
 
-from ubc_node.contracts import HumanHandoff, JsonValue
+from ubc_node.core.contracts import HumanHandoff, JsonValue
 
 
 def _empty_json_mapping() -> Mapping[str, JsonValue]:

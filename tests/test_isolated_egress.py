@@ -12,9 +12,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from ubc_node import isolated_egress as egress
-from ubc_node import isolated_worker
-from ubc_node.supervised_browser import write_worker_frame
+from ubc_node.browser.isolation import isolated_egress as egress
+from ubc_node.browser.isolation import isolated_worker
+from ubc_node.browser.supervised_browser import write_worker_frame
 
 HTTP = "http://approved.test"
 HTTPS = "https://approved.test"

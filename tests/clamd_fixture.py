@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from ubc_node.quarantine import ClamAVScanner
+from ubc_node.artifacts.quarantine import ClamAVScanner
 
 
 def read_scan(channel: socket.socket) -> bytes:

@@ -9,18 +9,22 @@ from contextlib import suppress
 from pathlib import Path
 from typing import cast
 
-from ubc_node.browser_contracts import BrowserSessionState
-from ubc_node.contracts import FatalRunError, JsonValue
-from ubc_node.isolation_contracts import BoundaryEvent, IsolatedBrowserLaunchSpec, RuntimeLimits
-from ubc_node.release_manifest import load_release_manifest, verify_release_manifest
-from ubc_node.stagehand_browser import BrowserSessionError, NavigationPolicyError
-from ubc_node.supervised_browser import (
+from ubc_node.browser.browser_contracts import BrowserSessionState
+from ubc_node.browser.isolation.isolation_contracts import (
+    BoundaryEvent,
+    IsolatedBrowserLaunchSpec,
+    RuntimeLimits,
+)
+from ubc_node.browser.stagehand_browser import BrowserSessionError, NavigationPolicyError
+from ubc_node.browser.supervised_browser import (
     WORKER_PROTOCOL_VERSION,
     BrowserWorkerClient,
     BrowserWorkerError,
     read_worker_frame,
     write_worker_frame,
 )
+from ubc_node.core.contracts import FatalRunError, JsonValue
+from ubc_node.release.release_manifest import load_release_manifest, verify_release_manifest
 
 ISOLATED_OPERATIONS = frozenset(
     {

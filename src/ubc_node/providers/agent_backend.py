@@ -9,8 +9,8 @@ from typing import Literal, Protocol, Self, cast, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from ubc_node.browser_contracts import ExtractionType
-from ubc_node.contracts import (
+from ubc_node.browser.browser_contracts import ExtractionType
+from ubc_node.core.contracts import (
     ActionKind,
     ActionProposal,
     AgentBackendError,

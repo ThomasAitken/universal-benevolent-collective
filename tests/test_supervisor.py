@@ -12,7 +12,7 @@ from tests.fakes import (
     ScriptedAgentBackend,
     ScriptedPolicyEvaluator,
 )
-from ubc_node.contracts import (
+from ubc_node.core.contracts import (
     ActionApprover,
     ActionCapability,
     ActionControl,
@@ -33,8 +33,8 @@ from ubc_node.contracts import (
     RunState,
     TaskSpec,
 )
-from ubc_node.policy import PrototypePolicyConfig, PrototypePolicyEvaluator
-from ubc_node.supervisor import CancellationToken, RunSupervisor
+from ubc_node.core.policy import PrototypePolicyConfig, PrototypePolicyEvaluator
+from ubc_node.core.supervisor import CancellationToken, RunSupervisor
 
 NOW = datetime(2026, 11, 21, 4, 0, tzinfo=UTC)
 HANDOFF = HumanHandoff(

@@ -1,13 +1,17 @@
-# C07 two-cycle pilot fixture
+# Pilot runbook
 
-Run `task pilot` from the repository root on macOS with Docker Desktop
-running, or on Linux with Docker and cgroup v2. Use `task sync` to install
-the locked development dependencies and provision the
-[pinned C06 analysis image](c06-research-records.md#analysis-deployment-gate).
+Run from the repository root on macOS with Docker Desktop running, or on
+Linux with Docker and cgroup v2. Install the locked development dependencies
+and pull the [pinned analysis image](../src/ubc_node/pilot/analysis_runner.py).
+
+```sh
+task sync
+docker pull docker.io/library/python@sha256:b685a4fa58bb19d1814d78a1ec0f0208f351452724f78b20212c984d6e124a34
+```
+
 On a Mac, the workflow runs in your terminal and the analysis worker runs
 inside Docker Desktop's Linux environment. The browser session and ClamAV
-verdict are simulated. You can exercise both cycles and their human review
-checkpoints without setting up a separate Linux machine.
+verdict are simulated.
 
 The [deployment acceptance run](#intended-linux-deployment) uses real
 Chromium through the Linux systemd and Podman launcher and a real ClamAV
@@ -35,16 +39,24 @@ configuration, or fixture run.
 
 ## Run and inspect
 
-The default workspace is `.ubc/c07`. Pass `--workspace PATH` after the task
-separator to use a different one. All commands print a JSON record or a
-diagnostic with a nonzero exit status.
+Use a dedicated workspace and pass it after the task separator in every
+command. For this run, set:
+
+```sh
+workspace=.ubc/pilot-mac
+```
+
+The run and inspect commands print JSON records. Copy record IDs from each
+cycle's `data` fields for the later inspect commands. Replace the uppercase
+placeholders in the examples with those values. Failures print a diagnostic
+and exit with a nonzero status.
 
 1. Run cycle 1.
 
    ```sh
-   task pilot
-   task pilot -- verify
-   task pilot -- inspect --record proposal:task-c07-v1
+   task pilot -- run --workspace "$workspace"
+   task pilot -- verify --workspace "$workspace"
+   task pilot -- inspect --workspace "$workspace" --record BASELINE_PROPOSAL_ID
    ```
 
    The deterministic agent chooses the NSW1 charter from two eligible
@@ -62,7 +74,8 @@ diagnostic with a nonzero exit status.
    your own review decision, rationale, independence basis, and conflicts.
 
    ```sh
-   task pilot -- review --cycle 1 --reviewer YOUR_REVIEWER_ID --decision approve \
+   task pilot -- review --workspace "$workspace" --cycle 1 \
+     --reviewer YOUR_REVIEWER_ID --decision approve \
      --reason 'State what you verified against the original source.' \
      --independence 'Describe your relationship to the proposal author.'
    ```
@@ -76,10 +89,10 @@ diagnostic with a nonzero exit status.
 3. Start cycle 2 in a fresh process.
 
    ```sh
-   task pilot -- run --cycle 2
-   task pilot -- inspect --record source:fixture-nsw-prices:v2 --artifact
-   task pilot -- inspect --record analysis:task-c07-v2
-   task pilot -- verify
+   task pilot -- run --workspace "$workspace" --cycle 2
+   task pilot -- inspect --workspace "$workspace" --record UPDATE_SOURCE_ID --artifact
+   task pilot -- inspect --workspace "$workspace" --record UPDATE_ANALYSIS_ID
+   task pilot -- verify --workspace "$workspace"
    ```
 
    The driver reopens the catalogue, finds the first source's dependants and
@@ -90,12 +103,12 @@ diagnostic with a nonzero exit status.
    stays in the programme queue for human admission. That charter proposes a
    further descriptive comparison of vintages.
 
-4. Review the update. A second reviewer can inspect the raw CSV and analysis
-   before opening `proposal:task-c07-v2`. Use the review command from step 2
-   with `--cycle 2` and the actual decision. A request for changes or
-   rejection keeps the baseline revision current. Inspect
-   `review:proposal:task-c07-v2` for the recorded decision, and
-   `followup:task-c07-v2` for the pending charter.
+4. Review the update. Inspect the raw CSV, the analysis, and the record
+   named in cycle 2's `proposal` field. Use the review command from step 2 with
+   `--cycle 2` and the actual decision. A request for changes or rejection
+   keeps the baseline revision current. Inspect the ID returned by the review
+   command for the recorded decision and the ID in cycle 2's `followup` field
+   for the pending charter.
 
 ## Pause, revoke, retry, and diagnose
 
@@ -106,9 +119,15 @@ diagnostic with a nonzero exit status.
   receipt and avoids a second scan for the same task, session, locator,
   filename, and digest. Use a fresh workspace if the scan or canary policy
   changes. Review retries require the original decision and explanation.
-- To withdraw scope, run `task pilot -- revoke --cycle 2 --reason 'Owner withdrew the grant.'`
-  with the relevant cycle. This can run from a second terminal while the
-  pilot is active. The browser is retired on observing revocation. Already
+- To withdraw scope, use the relevant cycle in the revoke command. This can
+  run from a second terminal while the pilot is active.
+
+  ```sh
+  task pilot -- revoke --workspace "$workspace" --cycle 2 \
+    --reason 'Owner withdrew the grant.'
+  ```
+
+  The browser is retired on observing revocation. Already
   running operator acquisition or analysis can finish within their component
   limits. The catalogue rejects their new publications under the revoked
   task. Committed records remain available to inspect. Use a new workspace
@@ -118,33 +137,39 @@ diagnostic with a nonzero exit status.
   text, digest, locator, time, session, and rights. For scanner failures check
   the quarantine acquisition journal and private socket. Get the receipt
   from the source record or the `acquisitions` table in
-  `quarantine/downloads.sqlite3`, then run `task pilot -- inspect --receipt RECEIPT`.
-  For worker failures, run `task pilot -- journal` and check the local engine
-  and pinned image against the bounded failure code. Avoid adding
-  credentials or private canary values to operator review text.
+  `quarantine/downloads.sqlite3`, then inspect it with `--receipt`.
+
+  ```sh
+  task pilot -- inspect --workspace "$workspace" --receipt RECEIPT
+  ```
+
+  For worker failures, run `task pilot -- journal --workspace "$workspace"`
+  and check the local engine and pinned image against the bounded failure
+  code. Avoid adding credentials or private canary values to operator review
+  text.
 - Archive the private workspace if you need reproducibility evidence.
   Otherwise remove that dedicated workspace after the pilot exits. A killed
   process can leave an incoming fixture file or quarantine staging until
-  retry. Run `uv run ubc quarantine --store WORKSPACE/quarantine recover`
+  retry. Run `uv run ubc quarantine --store "$workspace/quarantine" recover`
   if you need quarantine cleanup before retry. On an isolation test host,
-  follow the [C03 teardown](trusted-core-and-isolation.md#c03-acceptance) for
+  follow the [isolation fixture teardown](trusted-core-and-isolation.md#c03-acceptance) for
   the fixture containers, network, and image.
 
 ## Intended Linux deployment
 
 Install the matching launcher and current browser image on the intended
-Linux node. Follow the [C03 fixture setup](trusted-core-and-isolation.md#c03-acceptance)
+Linux node. Follow the [browser isolation fixture setup](trusted-core-and-isolation.md#c03-acceptance)
 to provide the private HTTP/TLS fixture and a matching manifest. Run the
-[C04 scanner gate](trusted-core-and-isolation.md#c04-download-quarantine),
-[C06 analysis gate](c06-research-records.md#analysis-deployment-gate), and
-[C05 browser gates](trusted-core-and-isolation.md#c05-acceptance), including
+[scanner gate](trusted-core-and-isolation.md#c04-download-quarantine),
+[analysis container gate](#analysis-container-gate), and
+[browser research gates](trusted-core-and-isolation.md#c05-acceptance), including
 the ordinary node and root operator egress runs. Those component gates cover
 injection, malformed inputs, canaries, resource limits, and privileged
 component loss. Use the same checkout and runtime configuration in the
 following integrated fixture:
 
 ```sh
-task pilot -- run --workspace .ubc/c07-deployment \
+task pilot -- run --workspace .ubc/pilot-deployment \
   --browser-manifest .ubc/c03-fixture-manifest.json \
   --scanner-socket /run/clamav/clamd.ctl
 ```
@@ -165,3 +190,18 @@ configured model run, and recorded source and tool limitations. Keep a live
 forecast pending until its named outcome is published. Use those deployment
 and live results to record the go/no-go decision for a private multi-node
 trial.
+
+## Analysis container gate
+
+With the pinned analysis image available, run this check against the intended
+Linux deployment engine before the integrated fixture.
+
+```sh
+task test-analysis-container
+```
+
+The gate checks repeatability, code digest, rejection of malformed input, and
+the actual worker's network, user, resource limits, read-only filesystem, and
+lack of fixture credentials and host authority. The host validates the
+bounded worker output and checks task authority again before committing the
+analysis. The gate exercises the fixed price method.

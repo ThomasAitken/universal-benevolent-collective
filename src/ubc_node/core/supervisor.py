@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from ubc_node.contracts import (
+from ubc_node.core.contracts import (
     ActionApprover,
     ActionKind,
     ActionProposal,
@@ -29,8 +29,8 @@ from ubc_node.contracts import (
     TaskAwareHandoffRuntime,
     TaskSpec,
 )
-from ubc_node.policy import audit_safe_parameters
-from ubc_node.state_machine import RunStateMachine
+from ubc_node.core.policy import audit_safe_parameters
+from ubc_node.core.state_machine import RunStateMachine
 
 
 class CancellationToken:

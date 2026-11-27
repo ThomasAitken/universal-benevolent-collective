@@ -6,8 +6,12 @@ from types import MappingProxyType
 from typing import cast
 from urllib.parse import urlsplit, urlunsplit
 
-from ubc_node.browser_contracts import BrowserContractError, normalize_origin, origin_for_url
-from ubc_node.contracts import (
+from ubc_node.browser.browser_contracts import (
+    BrowserContractError,
+    normalize_origin,
+    origin_for_url,
+)
+from ubc_node.core.contracts import (
     ActionCapability,
     ActionControl,
     ActionKind,

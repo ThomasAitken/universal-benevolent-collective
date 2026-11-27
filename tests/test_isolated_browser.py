@@ -17,19 +17,23 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from ubc_node import isolated_browser, isolated_worker
-from ubc_node.browser_contracts import BrowserSessionState
-from ubc_node.contracts import ActionProposal
-from ubc_node.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
-from ubc_node.isolation_contracts import (
+from ubc_node.browser.browser_contracts import BrowserSessionState
+from ubc_node.browser.isolation import isolated_browser, isolated_worker
+from ubc_node.browser.isolation.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
+from ubc_node.browser.isolation.isolation_contracts import (
     BoundaryChannelKind,
     ChannelCapability,
     IsolatedBrowserLaunchSpec,
     RuntimeLimits,
 )
-from ubc_node.release_manifest import create_release_manifest, write_release_manifest
-from ubc_node.stagehand_browser import NavigationPolicyError
-from ubc_node.supervised_browser import BrowserWorkerError, read_worker_frame, write_worker_frame
+from ubc_node.browser.stagehand_browser import NavigationPolicyError
+from ubc_node.browser.supervised_browser import (
+    BrowserWorkerError,
+    read_worker_frame,
+    write_worker_frame,
+)
+from ubc_node.core.contracts import ActionProposal
+from ubc_node.release.release_manifest import create_release_manifest, write_release_manifest
 
 ROOT = Path(__file__).parents[1]
 DIGEST = "sha256:" + "a" * 64

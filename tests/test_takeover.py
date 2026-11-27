@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ubc_node.takeover import (
+from ubc_node.browser.takeover import (
     CliTakeoverHandler,
     TakeoverDecision,
     TakeoverOutcome,
@@ -93,8 +93,8 @@ async def test_clear_system_clipboard_selects_platform_command(
     def fake_which(name: str) -> str | None:
         return f"/usr/bin/{name}" if name in available_bins else None
 
-    monkeypatch.setattr("ubc_node.takeover.sys.platform", platform_name)
-    monkeypatch.setattr("ubc_node.takeover.shutil.which", fake_which)
+    monkeypatch.setattr("ubc_node.browser.takeover.sys.platform", platform_name)
+    monkeypatch.setattr("ubc_node.browser.takeover.shutil.which", fake_which)
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     assert await clear_system_clipboard() is True
@@ -111,17 +111,17 @@ async def test_clear_system_clipboard_handles_missing_binary_and_os_error(
     def pbcopy_which(_name: str) -> str | None:
         return "/usr/bin/pbcopy"
 
-    monkeypatch.setattr("ubc_node.takeover.sys.platform", "linux")
-    monkeypatch.setattr("ubc_node.takeover.shutil.which", missing_which)
+    monkeypatch.setattr("ubc_node.browser.takeover.sys.platform", "linux")
+    monkeypatch.setattr("ubc_node.browser.takeover.shutil.which", missing_which)
     assert await clear_system_clipboard() is False
 
-    monkeypatch.setattr("ubc_node.takeover.sys.platform", "freebsd")
+    monkeypatch.setattr("ubc_node.browser.takeover.sys.platform", "freebsd")
     assert await clear_system_clipboard() is False
 
     def failing_run(*_args: object, **_kwargs: object) -> object:
         raise OSError("clipboard unavailable")
 
-    monkeypatch.setattr("ubc_node.takeover.sys.platform", "darwin")
-    monkeypatch.setattr("ubc_node.takeover.shutil.which", pbcopy_which)
+    monkeypatch.setattr("ubc_node.browser.takeover.sys.platform", "darwin")
+    monkeypatch.setattr("ubc_node.browser.takeover.shutil.which", pbcopy_which)
     monkeypatch.setattr(subprocess, "run", failing_run)
     assert await clear_system_clipboard() is False

@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import cast
 
-from ubc_node.supervised_browser import read_worker_frame
+from ubc_node.browser.supervised_browser import read_worker_frame
 
 _MAX_HEADER = 16 * 1024
 _MAX_CONNECTIONS = 32

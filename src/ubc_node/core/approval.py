@@ -4,14 +4,14 @@ import asyncio
 import json
 from collections.abc import Callable
 
-from ubc_node.contracts import (
+from ubc_node.core.contracts import (
     ActionProposal,
     ApprovalDecision,
     ApprovalOutcome,
     PolicyDecision,
     TaskSpec,
 )
-from ubc_node.policy import audit_safe_parameters
+from ubc_node.core.policy import audit_safe_parameters
 
 
 class CliActionApprover:

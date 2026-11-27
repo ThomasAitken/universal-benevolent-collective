@@ -21,13 +21,19 @@ from tests.clamd_fixture import clamd_listener, scanner_for
 from tests.egress_fixture import APPROVED, PILOT_PAGES, TLS_PORT
 from tests.fakes import ScriptedAgentBackend
 from tests.pilot.fixtures import AUTHOR, BASE, OUTCOME, SOURCE, START, WINDOW, draft_thesis
-from ubc_node.browser_contracts import BrowserSession, BrowserSessionState, PageInspection, TabInfo
-from ubc_node.browser_research import run_browser_research
-from ubc_node.contracts import ActionProposal, EventKind, RunState, TaskSpec
-from ubc_node.event_log import JsonlEventLog
-from ubc_node.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
-from ubc_node.isolation_contracts import IsolatedBrowserRuntime
+from ubc_node.artifacts.quarantine import ClamAVScanner, DownloadQuarantine, DownloadScope
+from ubc_node.browser.browser_contracts import (
+    BrowserSession,
+    BrowserSessionState,
+    PageInspection,
+    TabInfo,
+)
+from ubc_node.browser.isolation.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
+from ubc_node.browser.isolation.isolation_contracts import IsolatedBrowserRuntime
+from ubc_node.core.contracts import ActionProposal, EventKind, RunState, TaskSpec
+from ubc_node.core.event_log import JsonlEventLog
 from ubc_node.pilot.analysis_runner import AnalysisRunner
+from ubc_node.pilot.browser_research import run_browser_research
 from ubc_node.pilot.catalogue import (
     Object,
     Record,
@@ -41,7 +47,6 @@ from ubc_node.pilot.catalogue import (
 )
 from ubc_node.pilot.forecasts import freeze_question, resolve_forecast, submit_forecast
 from ubc_node.pilot.thesis_review import Decision, ThesisReview
-from ubc_node.quarantine import ClamAVScanner, DownloadQuarantine, DownloadScope
 
 ROOT = Path(__file__).resolve().parents[2]
 PROGRAMME = "fixture-markets"

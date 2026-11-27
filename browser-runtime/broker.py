@@ -100,7 +100,7 @@ def _gate_command(
         "--memory-swap=134217728",
         "--cpus=1",
         "--pids-limit=32",
-        '--entrypoint=["python","-m","ubc_node.isolated_egress"]',
+        '--entrypoint=["python","-m","ubc_node.browser.isolation.isolated_egress"]',
         "--",
         image,
         str(listener),

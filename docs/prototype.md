@@ -2,11 +2,11 @@
 
 The repository implements a bounded local runtime for one human-supervised
 agent and a repeatable research demonstration. This reference covers the
-implemented supervisor, browser tools, policy, and audit. The next milestone
-uses these foundations to run a living research programme across two cycles,
-with versioned data, reproducible analysis, and thesis review.
+implemented supervisor, browser tools, policy, and audit. The two-cycle
+research fixture uses these foundations for versioned data, reproducible
+analysis, and thesis review.
 [Product and architecture specification](product-and-architecture-spec.md) ·
-[Single-node research pilot roadmap](single-node-pilot-roadmap.md)
+[Single-node research pilot](single-node-pilot.md)
 
 The central design rule is that a model may propose work but does not receive
 direct browser authority. Budgets, policy, approval, browser execution, human
@@ -44,8 +44,8 @@ The main implementation boundaries are:
 | `CliTakeoverHandler` | Pause automation while a human directly handles a checkpoint |
 | Event sinks | Persist separately attributable proposal, policy, approval, execution, and lifecycle facts |
 
-The contracts are in [contracts.py](../src/ubc_node/contracts.py) and
-[browser_contracts.py](../src/ubc_node/browser_contracts.py). Deterministic
+The contracts are in [contracts.py](../src/ubc_node/core/contracts.py) and
+[browser_contracts.py](../src/ubc_node/browser/browser_contracts.py). Deterministic
 fakes exercise the same boundaries in the ordinary test suite.
 
 ## Runtime lifecycle and bounded loop

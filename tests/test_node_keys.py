@@ -2,7 +2,7 @@
 
 import pytest
 
-from ubc_node.node_keys import NodeSignature
+from ubc_node.release.node_keys import NodeSignature
 
 
 def test_node_signature_accepts_ed25519_output() -> None:

@@ -6,7 +6,7 @@ from pathlib import Path
 from threading import Lock
 from typing import cast
 
-from ubc_node.contracts import JsonValue, RunEvent
+from ubc_node.core.contracts import JsonValue, RunEvent
 
 
 class EventLogError(ValueError):

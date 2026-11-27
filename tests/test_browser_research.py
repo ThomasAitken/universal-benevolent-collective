@@ -11,12 +11,14 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from tests.fakes import ScriptedAgentBackend
-from ubc_node.browser_contracts import BrowserSession, BrowserSessionState, PageInspection, TabInfo
-from ubc_node.browser_research import (
-    _ResearchBrowser,  # pyright: ignore[reportPrivateUsage]
-    run_browser_research,
+from ubc_node.browser.browser_contracts import (
+    BrowserSession,
+    BrowserSessionState,
+    PageInspection,
+    TabInfo,
 )
-from ubc_node.contracts import (
+from ubc_node.browser.isolation.isolation_contracts import IsolatedBrowserLaunchSpec
+from ubc_node.core.contracts import (
     ActionProposal,
     AgentBackend,
     EventKind,
@@ -28,8 +30,11 @@ from ubc_node.contracts import (
     RunState,
     TaskSpec,
 )
-from ubc_node.event_log import JsonlEventLog
-from ubc_node.isolation_contracts import IsolatedBrowserLaunchSpec
+from ubc_node.core.event_log import JsonlEventLog
+from ubc_node.pilot.browser_research import (
+    _ResearchBrowser,  # pyright: ignore[reportPrivateUsage]
+    run_browser_research,
+)
 
 URL = "https://market.test/source"
 SOURCES = {"price-source": URL}
@@ -247,7 +252,7 @@ async def test_launch_timeout_and_revoke_outlive_run_duration_budget(
 async def test_browser_error_fails_immediately_only_when_session_is_revoked(
     research: ResearchFixture, revoked: bool
 ) -> None:
-    from ubc_node.supervised_browser import BrowserWorkerError
+    from ubc_node.browser.supervised_browser import BrowserWorkerError
 
     calls = 0
 

@@ -61,21 +61,21 @@ tasks:
       - uv run pytest -m isolated_browser --no-cov
 
   test-quarantine-scanner:
-    desc: Run the opt-in C04 quarantine gate against a local ClamAV daemon socket
+    desc: Run the opt-in quarantine check against a local ClamAV daemon socket
     env:
       UBC_RUN_QUARANTINE_SCANNER_E2E: "1"
     cmds:
       - uv run pytest -m quarantine_scanner --no-cov
 
   test-analysis-container:
-    desc: Run the C06 worker acceptance gate against the pinned Linux image
+    desc: Run the analysis worker acceptance check against the pinned Linux image
     env:
       UBC_RUN_ANALYSIS_CONTAINER_E2E: "1"
     cmds:
       - uv run pytest tests/pilot/test_analysis_runner.py::test_linux_container_analysis --no-cov
 
   pilot:
-    desc: Operate the local C07 two-cycle research fixture
+    desc: Operate the two-cycle research fixture
     cmds:
       - uv run python -m tests.pilot.run_fixture {{.CLI_ARGS}}
 

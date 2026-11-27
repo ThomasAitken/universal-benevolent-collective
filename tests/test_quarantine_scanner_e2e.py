@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from ubc_node.quarantine import ClamAVScanner, DownloadQuarantine, DownloadRejected, DownloadScope
+from ubc_node.artifacts.quarantine import (
+    ClamAVScanner,
+    DownloadQuarantine,
+    DownloadRejected,
+    DownloadScope,
+)
 
 pytestmark = [
     pytest.mark.quarantine_scanner,
