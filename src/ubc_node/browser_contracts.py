@@ -138,6 +138,7 @@ class PageInspection:
     content: str
     content_truncated: bool
     untrusted: bool = True
+    http_status: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

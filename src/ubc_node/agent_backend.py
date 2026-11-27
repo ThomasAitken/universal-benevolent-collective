@@ -404,12 +404,16 @@ class StructuredAgentBackend:
         *,
         max_history_events: int = 20,
         pricing: ModelPricing | None = None,
+        system_instruction: str = PROPOSAL_SYSTEM_INSTRUCTION,
+        json_schema: Mapping[str, JsonValue] = PROPOSAL_JSON_SCHEMA,
     ) -> None:
         if max_history_events < 1:
             raise ValueError("max_history_events must be at least 1")
         self._provider = provider
         self._max_history_events = max_history_events
         self._pricing = pricing
+        self._system_instruction = system_instruction
+        self._json_schema = json_schema
 
     async def aclose(self) -> None:
         """Close the underlying provider if it exposes an async close method."""
@@ -435,13 +439,13 @@ class StructuredAgentBackend:
     ) -> ActionProposal:
         """Build a provenance-labeled prompt, call the provider, and validate its proposal."""
         request = ProposalRequest(
-            system_instruction=PROPOSAL_SYSTEM_INSTRUCTION,
+            system_instruction=self._system_instruction,
             user_prompt=render_proposal_prompt(
                 task,
                 history,
                 max_history_events=self._max_history_events,
             ),
-            json_schema=PROPOSAL_JSON_SCHEMA,
+            json_schema=self._json_schema,
         )
         response = await self._provider.generate_proposal(request)
         active_pricing = self._pricing or self._provider.pricing

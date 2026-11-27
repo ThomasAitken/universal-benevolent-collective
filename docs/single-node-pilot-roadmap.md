@@ -1,6 +1,6 @@
 # Single-node research pilot roadmap
 
-- **Current focus** · C04 download quarantine and release
+- **Current focus** · C04 deployment acceptance
 - **Delivery model** · Dependency-ordered commits to `main`
 - **Updated** · 2026-11-27
 
@@ -76,12 +76,12 @@ tracker records the resulting behaviour and residual limits.
 | C02 | done | C01 | Offline Chromium in the Linux isolation boundary with terminal session failure |
 | C03 | done | C02 | Private per-session egress gate with HTTP/HTTPS Chromium and zero-contact fixtures |
 | C04 | implemented, deployment gate pending | C03 | Operator-imported, quarantined, scanned, content-addressed pilot CSVs |
-| C05 | queued | C03, C04 | Bounded model-assisted evidence collection through the isolated browser |
+| C05 | done | C03 | Inventory-scoped Chromium evidence with provenance and a supervisor audit |
 | C06 | queued | C01, C04 | Local research records, reproducible analysis, thesis review, and forecast resolution |
 | C07 | queued | C05, C06 | Integrated two-cycle research pilot and operator acceptance |
 
-C04 is the next landing target. Public-page observations for C05 and analysis
-with preloaded fixtures for C06 can be developed in parallel with quarantine.
+Public-page evidence and operator CSV acquisition can be accepted separately.
+Any future browser artifact handoff must use the C04 quarantine gate.
 
 ## C01–C03 — Trusted core, isolation, and egress
 
@@ -143,25 +143,35 @@ disabled until an explicit handoff can use the quarantine gate.
 
 ## C05 — Isolated browser research
 
-- Connect the supervisor's typed, policy-checked browser operations to the
-  isolated worker. Support the navigation, structured observation and
-  page-local controls needed to find and verify the pilot sources. Bound
-  output sizes, tabs, time, tool use, and origin changes.
-- Attach origin, locator, retrieval time and source references to evidence
-  observations. Keep page text, screenshots, and extracted content labelled
-  as untrusted. Model-visible data contains no authority to widen policy or
-  invoke raw browser control.
-- Keep sessions disposable. Deny public submission, uploads, authentication,
-  raw CDP, arbitrary script execution, and access to browser storage and host
-  paths. Require C04 for artifact export through quarantine.
-- Exercise approved tasks in Chromium and verify that forbidden operations,
-  redirects, prompt injection, expiry, cancellation, and channel failure
-  remain contained. Prove that old handles and browser state cannot survive
-  session loss. Confirm denied destinations receive zero contact.
+The model selects a locator from a small operator-approved inventory. The
+supervisor authorizes one combined navigation and structured page snapshot at
+a time through the existing typed Linux worker. The pilot needs one active
+tab and no page mutations. Additional page controls need a specific source
+requirement and containment evidence. The session allows only inventory
+origins, and the launcher checks them against the operator's egress policy.
 
-Start with operator-approved origins and a small source inventory. Expand
-operations and approved origins against observed research needs and acceptance
-evidence.
+Accept evidence only when navigation returns a successful HTTP response, the
+reported locator matches the inventory, and the same tab and locator are
+present after capture. Journal the source and evidence identifiers, session,
+origin, locator, UTC retrieval time, HTTP status, snapshot text and its digest.
+The model receives the observation as untrusted data and can cite its evidence
+identifier in draft findings. Bound model calls, browser actions, wall time,
+snapshot characters and tab count. Retire the disposable session on every run
+exit.
+
+The research surface exposes URL selection and completion. Submission, upload,
+authentication, screenshots, raw CDP, arbitrary script, browser storage and
+artifact export have no model-accessible operation. Browser downloads stay
+disabled. Operators acquire approved CSVs through C04.
+
+`task check` passed with 100% statement and branch coverage. The installed
+launcher gate passed in a disposable Linux environment with systemd, Podman,
+crun, and Chromium. Six ordinary-node and ten root-operator cases passed.
+The runs exercised evidence capture, an injected proposal, denied redirects,
+fresh tab handles and storage, and session cleanup after channel loss.
+The denied fixture registered zero TCP or UDP contacts. Repeat the gate on
+the intended pilot deployment before connecting to live sources.
+[Operator command and acceptance gate](trusted-core-and-isolation.md#c05-browser-research)
 
 ## C06 — Research records, analysis, and review
 

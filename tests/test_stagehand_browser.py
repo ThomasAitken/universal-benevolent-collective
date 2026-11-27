@@ -641,3 +641,24 @@ async def test_execute_bridge_rejects_invalid_extraction_schemas(
     adapter, _, _, _, _ = _adapter(tmp_path)
     with pytest.raises(BrowserContractError):
         await adapter.execute(_proposal("extract", instruction="Extract", schema=schema))
+
+
+async def test_navigation_response_must_match_the_inspected_page(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    adapter, page, _, _, _ = _adapter(tmp_path)
+    page.goto = AsyncMock(return_value=SimpleNamespace(url=f"{ORIGIN}/", status=200))
+    assert (await adapter.open_url(f"{ORIGIN}/")).http_status == 200
+    page.goto = AsyncMock(return_value=SimpleNamespace(url=f"{ORIGIN}/prev", status=200))
+    assert (await adapter.open_url(f"{ORIGIN}/")).http_status is None
+
+
+async def test_inspection_rejects_a_location_change_during_snapshot(tmp_path: Path) -> None:
+    from unittest.mock import AsyncMock
+
+    adapter, page, _, _, _ = _adapter(tmp_path)
+    page.url = AsyncMock(side_effect=[f"{ORIGIN}/", f"{ORIGIN}/changed"])
+    with pytest.raises(NavigationPolicyError, match="changed during inspection"):
+        await adapter.inspect()
+    assert adapter.state is BrowserSessionState.REVOKED

@@ -612,3 +612,18 @@ def test_broker_cleanup_and_egress_config_validation(
     monkeypatch.setattr(broker, "EGRESS_POLICY_PATH", oversized_policy)
     with pytest.raises(ValueError, match="configuration limit"):
         broker.main()
+
+
+@pytest.mark.parametrize("status", ["200", True])
+async def test_malformed_navigation_status_revokes_the_typed_session(
+    runtime: PodmanBrowserRuntime,
+    monkeypatch: pytest.MonkeyPatch,
+    status: object,
+) -> None:
+    async with _channel() as streams:
+        session = await _launch(runtime, monkeypatch, *streams)
+        inspection = asyncio.create_task(session.open_url(FIXTURE_ORIGIN))
+        await _response(*streams[2:], "open", {**INSPECTION, "http_status": status})
+        with pytest.raises(BrowserWorkerError, match="http_status"):
+            await inspection
+        assert session.state is BrowserSessionState.REVOKED

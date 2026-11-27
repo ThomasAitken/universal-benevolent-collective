@@ -304,3 +304,55 @@ Verify the node releases a clean fixture, rejects the matching fixture, and
 rejects imports with the daemon stopped. Verify that the scanner identity
 cannot traverse the store, read node keys or write node audit files. Repeat
 the C03 acceptance on the intended launcher before live-source work.
+
+## C05 browser research
+
+Run from the source tree on a Linux node with the installed browser launcher
+and a matching manifest. Review the anonymous sources and their rights for
+retaining page text and sharing it with the configured model provider. Use
+`OPENAI_API_KEY` in the trusted node environment. The browser does not
+receive provider credentials. Supply the exact canonical HTTP(S) locators
+with explicit paths, including `/` for a root page. User info, queries and
+fragments are excluded. Use the final locator for a source that redirects.
+Replace the example host with an approved source from the launcher's egress
+policy.
+
+```shell
+uv run ubc research \
+  --manifest .ubc/pilot-manifest.json \
+  --journal .ubc/research/prices-run-1.jsonl \
+  --task prices-source-review \
+  --objective 'Find the market interval and published price definition.' \
+  --source glossary https://market.example/glossary \
+  --source release-notes https://market.example/release-notes
+```
+
+A run uses a fresh profile and one active tab. The command accepts up to 16
+inventory entries and allows up to eight model calls, seven navigations and
+120 seconds including session startup. Press Ctrl-C to cancel. Use a new
+journal path to retry. The command creates it with owner-only access. Inspect
+`browser_action_completed` events for evidence and `run_finished` for the
+draft or failure. Each observation retains up to 8,000 snapshot characters
+and a SHA-256 of that retained text. Check model citations and findings
+against the journal before reuse.
+
+The inventory limits the model's requested top-level destination and the
+locators accepted as evidence. Chromium can still load resources or follow
+redirects at origins admitted to the session by the egress gate. The same
+egress restrictions apply to page-initiated HTTPS traffic. C04 provides the
+operator path for releasing CSVs into analysis.
+[HTTPS boundary](#private-egress-gate)
+
+### C05 acceptance
+
+Build the current image and repeat the C03 gate with the local fixture and
+matching manifest. [C03 acceptance](#c03-acceptance)
+
+Run the ordinary node and operator gates before using the intended
+deployment with public sources. The C05 cases use
+a deterministic structured model provider and no API key. They verify the
+supervisor through the isolated worker, evidence labels in the model prompt,
+retirement after normal completion and policy failure, an injected instruction
+that causes a denied proposal, and a server redirect that yields no evidence.
+The operator gate confirms zero denied TCP and UDP contacts. It also retains
+the C03 channel failure and container cleanup checks.

@@ -805,6 +805,9 @@ def _record_number(value: Mapping[str, object], key: str) -> float:
 
 
 def _inspection(value: Mapping[str, JsonValue]) -> PageInspection:
+    status = value.get("http_status")
+    if status is not None and (not isinstance(status, int) or isinstance(status, bool)):
+        raise BrowserWorkerError("worker field http_status must be an integer or null")
     return PageInspection(
         _record_string(cast(Mapping[str, object], value), "tab_id"),
         _record_string(cast(Mapping[str, object], value), "url"),
@@ -812,6 +815,7 @@ def _inspection(value: Mapping[str, JsonValue]) -> PageInspection:
         _record_string(cast(Mapping[str, object], value), "content"),
         _record_boolean(cast(Mapping[str, object], value), "content_truncated"),
         _record_boolean(cast(Mapping[str, object], value), "untrusted"),
+        status,
     )
 
 

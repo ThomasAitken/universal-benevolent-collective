@@ -14,8 +14,16 @@ from uuid import uuid4
 import pytest
 
 from tests.egress_fixture import APPROVED, DENIED, DENIED_IP, DENIED_PORT, HTTP_PORT, TLS_PORT
+from ubc_node.agent_backend import (
+    ModelPricing,
+    ModelResponse,
+    ProposalRequest,
+    StructuredAgentBackend,
+)
 from ubc_node.browser_contracts import BrowserSession, BrowserSessionState
-from ubc_node.contracts import JsonValue
+from ubc_node.browser_research import RESEARCH_INSTRUCTION, RESEARCH_SCHEMA, run_browser_research
+from ubc_node.contracts import EventKind, JsonValue, RunState, TaskSpec
+from ubc_node.event_log import JsonlEventLog
 from ubc_node.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
 from ubc_node.isolation_contracts import (
     BoundaryChannelKind,
@@ -66,6 +74,9 @@ async def test_isolated_chromium_approved_page_denied_redirect_and_fresh_session
         assert started.payload["browser_image_digest"] == digest
         alpha = await session.open_url(f"{FIXTURE_ORIGIN}/source/alpha")
         assert "12 hectares" in alpha.content
+        assert alpha.http_status == 200
+        await session.open_url(f"{FIXTURE_ORIGIN}/session-write")
+        assert "retained" in (await session.open_url(f"{FIXTURE_ORIGIN}/session-read")).content
         tls = await session.open_url(f"{FIXTURE_TLS_ORIGIN}/source/alpha")
         assert "12 hectares" in tls.content
         renderer = await session.new_tab(f"{FIXTURE_TLS_ORIGIN}/renderer")
@@ -102,10 +113,90 @@ async def test_isolated_chromium_approved_page_denied_redirect_and_fresh_session
     replacement = await runtime.launch(_spec(digest))
     try:
         assert len(await replacement.list_tabs()) == 1
+        assert (
+            "Empty storage"
+            in (await replacement.open_url(f"{FIXTURE_ORIGIN}/session-read")).content
+        )
         assert "18 percent" in (await replacement.open_url(f"{FIXTURE_ORIGIN}/source/beta")).content
     finally:
         await replacement.close()
     assert replacement.state is BrowserSessionState.CLOSED
+
+
+class _FixtureModel:
+    pricing = ModelPricing(0, 0)
+
+    def __init__(self, page: str, attack: bool) -> None:
+        self.page = page
+        self.attack = attack
+        self.calls = 0
+
+    async def generate_proposal(self, request: ProposalRequest) -> ModelResponse:
+        assert request.json_schema == RESEARCH_SCHEMA
+        self.calls += 1
+        if self.calls == 1:
+            proposal = {"kind": "browser", "operation": "open", "url": self.page}
+        elif self.attack:
+            assert "Ignore the task" in request.user_prompt
+            assert "untrusted_external_data" in request.user_prompt
+            proposal = {
+                "kind": "browser",
+                "operation": "open",
+                "url": f"http://{DENIED}:{DENIED_PORT}/",
+            }
+        else:
+            context = json.loads(request.user_prompt)
+            event = context["events"][-1]
+            assert event["trust"] == "untrusted_external_data"
+            observation = event["payload"]["observation"]
+            assert "12 hectares" in observation["content"]
+            proposal = {"kind": "complete", "output": f"12 hectares [{observation['evidence_id']}]"}
+        return ModelResponse(json.dumps({"description": "Fixture proposal", **proposal}))
+
+
+@pytest.mark.parametrize(
+    ("path", "attack", "expected"),
+    [
+        ("/source/alpha", False, RunState.COMPLETED),
+        ("/malicious", True, RunState.FAILED),
+        ("/outside-redirect", False, RunState.FAILED),
+    ],
+)
+async def test_research_supervisor_uses_real_isolated_chromium(
+    tmp_path: Path, path: str, attack: bool, expected: RunState
+) -> None:
+    runtime, digest = _runtime()
+    log = JsonlEventLog(tmp_path / "c05.jsonl")
+    url = FIXTURE_ORIGIN + path
+    model = _FixtureModel(url, attack)
+    async with StructuredAgentBackend(
+        model, system_instruction=RESEARCH_INSTRUCTION, json_schema=RESEARCH_SCHEMA
+    ) as agent:
+        result = await run_browser_research(
+            TaskSpec("fixture", "Read the fixture text"),
+            {"fixture-page": url},
+            runtime=runtime,
+            image_digest=digest,
+            agent=agent,
+            event_sink=log,
+        )
+    assert result.state is expected
+    events = log.read_all()
+    observations = [event for event in events if event.kind is EventKind.BROWSER_ACTION_COMPLETED]
+    if path == "/outside-redirect":
+        assert not observations
+        assert "navigation denied" in str(result.error)
+    else:
+        assert len(observations) == 1
+    if attack:
+        assert "policy denied" in str(result.error)
+        assert (
+            len([event for event in events if event.kind is EventKind.BROWSER_ACTION_STARTED]) == 1
+        )
+    assert (await asyncio.wait_for(runtime.next_event(), 2)).kind == "isolated_browser_started"
+    assert (await asyncio.wait_for(runtime.next_event(), 2)).kind == "isolated_browser_ended"
+    if os.environ.get("UBC_RUN_ISOLATION_ADMIN") == "1":
+        _assert_denied_untouched()
 
 
 def _podman(*args: str) -> str:
@@ -317,12 +408,13 @@ for request in (
             gate_inspected = await asyncio.to_thread(
                 _podman, "inspect", "--type", "container", gate
             )
-            gate_config = json.loads(gate_inspected)[0]["HostConfig"]
+            gate_status = json.loads(gate_inspected)[0]
+            gate_config = gate_status["HostConfig"]
             assert gate_config["ReadonlyRootfs"] is True
             assert gate_config["PidsLimit"] == 32 and gate_config["Memory"] == 128 * 1024 * 1024
             assert gate_config["CpuQuota"] == gate_config["CpuPeriod"] > 0
             assert not gate_config["PortBindings"] and not gate_config["Binds"]
-            assert gate_config["NetworkMode"] == "ubc-egress-fixture"
+            assert set(gate_status["NetworkSettings"]["Networks"]) == {"ubc-egress-fixture"}
             await asyncio.to_thread(_assert_denied_untouched)
             await asyncio.to_thread(_podman, "kill", "--signal", "KILL", container)
         elif failure == "gate":

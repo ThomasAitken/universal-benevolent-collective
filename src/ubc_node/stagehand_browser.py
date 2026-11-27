@@ -3,7 +3,7 @@
 import asyncio
 import hashlib
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from time import monotonic
 from typing import Protocol, cast
@@ -75,10 +75,20 @@ class _LocatorLike(Protocol):
     async def fill(self, value: str) -> None: ...
 
 
+class _NavigationResponse(Protocol):
+    @property
+    def status(self) -> int: ...
+
+    @property
+    def url(self) -> str: ...
+
+
 class _PageLike(Protocol):
     page_id: str
 
-    async def goto(self, url: str, *, wait_until: str | None = None) -> object: ...
+    async def goto(
+        self, url: str, *, wait_until: str | None = None
+    ) -> _NavigationResponse | None: ...
 
     async def url(self) -> str: ...
 
@@ -272,17 +282,24 @@ class StagehandBrowserAdapter:
         self._require_approved_url(url)
         page = await self._active_page()
         self._invalidate_candidates()
-        await page.goto(url, wait_until="domcontentloaded")
-        await self._enforce_page_origin(page)
-        return await self.inspect()
+        response = await page.goto(url, wait_until="domcontentloaded")
+        inspection = await self._inspect_page(page)
+        if response is not None and response.url == inspection.url:
+            return replace(inspection, http_status=response.status)
+        return inspection
 
     async def inspect(self) -> PageInspection:
         """Return a bounded snapshot labeled as untrusted page content."""
         self._require_active()
-        page = await self._active_page()
-        await self._enforce_page_origin(page)
+        return await self._inspect_page(await self._active_page())
+
+    async def _inspect_page(self, page: _PageLike) -> PageInspection:
+        url = await self._enforce_page_origin(page)
         tab_id = self._token_for_page(page)
-        url, title, snapshot = await asyncio.gather(page.url(), page.title(), page.snapshot())
+        title, snapshot = await asyncio.gather(page.title(), page.snapshot())
+        if await self._enforce_page_origin(page) != url:
+            await self.revoke()
+            raise NavigationPolicyError("page location changed during inspection")
         if isinstance(snapshot, Mapping):
             content_value = cast(Mapping[str, object], snapshot).get("formatted_tree", "")
         else:
@@ -710,7 +727,7 @@ class StagehandBrowserAdapter:
         if origin not in self._config.allowed_origins:
             raise NavigationPolicyError(f"origin is not approved: {origin}")
 
-    async def _enforce_page_origin(self, page: _PageLike) -> None:
+    async def _enforce_page_origin(self, page: _PageLike) -> str:
         url = await page.url()
         try:
             origin = origin_for_url(url)
@@ -720,6 +737,7 @@ class StagehandBrowserAdapter:
         if origin not in self._config.allowed_origins:
             await self.revoke()
             raise NavigationPolicyError(f"browser reached an unapproved origin: {origin}")
+        return url
 
     def _invalidate_candidates(self) -> None:
         self._candidates.clear()

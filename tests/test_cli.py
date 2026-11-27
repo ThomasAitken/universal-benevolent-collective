@@ -179,3 +179,81 @@ def test_demo_command_handles_keyboard_interrupt(
     monkeypatch.setattr(cli_module.asyncio, "run", interrupted)
     assert run(["demo"]) == 130
     assert "cancelled by operator" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("completed", [True, False])
+def test_research_command_uses_private_audit_and_verified_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, completed: bool
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from ubc_node.contracts import BudgetUsage, RunResult, RunState
+
+    journal = tmp_path / "run.jsonl"
+    state = RunState.COMPLETED if completed else RunState.FAILED
+    runner = AsyncMock(return_value=RunResult("run", "task", state, BudgetUsage(), 1, error="test"))
+    monkeypatch.setattr(cli_module, "run_browser_research", runner)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-provider-key")
+    argv = [
+        "research",
+        "--journal",
+        str(journal),
+        "--task",
+        "task",
+        "--objective",
+        "review price notes",
+        "--source",
+        "notes",
+        "https://market.test/notes",
+    ]
+    assert run(argv) == (0 if completed else 1)
+    assert journal.stat().st_mode & 0o777 == 0o600
+    assert runner.call_args.args[1] == {"notes": "https://market.test/notes"}
+    assert run(argv) == 1
+    assert run([*argv, "--source", "notes", "https://market.test/source"]) == 1
+    bad_journal = tmp_path / "invalid-url.jsonl"
+    assert (
+        run(
+            [
+                "research",
+                "--journal",
+                str(bad_journal),
+                "--task",
+                "task",
+                "--objective",
+                "review price notes",
+                "--source",
+                "notes",
+                "https://market.test",
+            ]
+        )
+        == 1
+    )
+    assert not bad_journal.exists()
+    runner.assert_awaited_once()
+
+
+@pytest.mark.parametrize(("error", "code"), [(KeyboardInterrupt(), 130), (TimeoutError(), 1)])
+def test_research_command_maps_interruption(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: BaseException, code: int
+) -> None:
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(cli_module, "_run_research", AsyncMock(side_effect=error))
+    assert (
+        run(
+            [
+                "research",
+                "--journal",
+                str(tmp_path / "interrupted.jsonl"),
+                "--task",
+                "task",
+                "--objective",
+                "test cancellation",
+                "--source",
+                "source",
+                "https://market.test/",
+            ]
+        )
+        == code
+    )

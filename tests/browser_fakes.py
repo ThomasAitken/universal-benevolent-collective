@@ -52,10 +52,9 @@ class FakePage:
         self.snapshot_as_model = False
         self.locators: dict[str, FakeLocator] = {}
 
-    async def goto(self, url: str, *, wait_until: str | None = None) -> object:
+    async def goto(self, url: str, *, wait_until: str | None = None) -> None:
         assert wait_until == "domcontentloaded"
         self.current_url = self.goto_target or url
-        return object()
 
     async def url(self) -> str:
         return self.current_url

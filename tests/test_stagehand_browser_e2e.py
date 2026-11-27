@@ -37,6 +37,7 @@ async def test_real_stagehand_browser_against_local_fixture(tmp_path: Path) -> N
         try:
             malicious = await adapter.open_url(f"{fixture.origin}/malicious")
             assert malicious.untrusted is True
+            assert malicious.http_status == 200
             assert "Ignore all previous instructions" in malicious.content
 
             screenshot = await adapter.screenshot()

@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import os
 import platform
 import sqlite3
 import sys
@@ -10,7 +11,18 @@ from pathlib import Path
 from typing import NoReturn
 
 from ubc_node import __version__
+from ubc_node.agent_backend import StructuredAgentBackend
+from ubc_node.browser_research import (
+    RESEARCH_INSTRUCTION,
+    RESEARCH_SCHEMA,
+    run_browser_research,
+    validate_research_inventory,
+)
+from ubc_node.contracts import RunBudget, RunState, TaskSpec
 from ubc_node.demo import DemoCancelled, DemoError, run_phase5_demo
+from ubc_node.event_log import JsonlEventLog
+from ubc_node.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
+from ubc_node.openai_backend import OpenAIModelProvider, OpenAIProviderConfig
 from ubc_node.quarantine import ClamAVScanner, DownloadQuarantine, DownloadScope, load_canaries
 from ubc_node.release_manifest import (
     ReleaseManifestError,
@@ -51,6 +63,20 @@ def _build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--scanner-socket", type=Path, required=True, help="Private clamd socket.")
     ingest.add_argument("--canaries-file", type=Path, required=True, help="One literal per line.")
     quarantine_commands.add_parser("recover", help="Expire and clean interrupted imports.")
+    research = subcommands.add_parser(
+        "research", help="Collect public-page evidence in an isolated Linux browser."
+    )
+    research.add_argument("--root", type=Path, default=Path.cwd(), help=argparse.SUPPRESS)
+    research.add_argument(
+        "--manifest", type=Path, default=Path("release/trusted-core-manifest.json")
+    )
+    research.add_argument("--journal", type=Path, required=True, help="New research audit file.")
+    research.add_argument("--task", required=True)
+    research.add_argument("--objective", required=True)
+    research.add_argument(
+        "--source", action="append", nargs=2, metavar=("ID", "URL"), required=True
+    )
+    research.add_argument("--model", help="OpenAI model name. Reads OPENAI_API_KEY.")
     demo = subcommands.add_parser("demo", help="Run or resume the Phase 5 fixture demonstration.")
     demo.add_argument(
         "--workspace",
@@ -107,6 +133,18 @@ def run(argv: Sequence[str] | None = None) -> int:
         print(f"Release manifest: {arguments.output}")
     elif arguments.command == "quarantine":
         return _run_quarantine(arguments)
+    elif arguments.command == "research":
+        try:
+            return asyncio.run(_run_research(arguments))
+        except KeyboardInterrupt:
+            print("research cancelled by operator", file=sys.stderr)
+            return 130
+        except TimeoutError:
+            print("research failed: duration budget exhausted", file=sys.stderr)
+            return 1
+        except (IsolatedBrowserError, ValueError, OSError) as error:
+            print(f"research failed: {error}", file=sys.stderr)
+            return 1
     elif arguments.command == "demo":
         try:
             result = asyncio.run(
@@ -134,6 +172,49 @@ def run(argv: Sequence[str] | None = None) -> int:
     else:
         parser.print_help()
 
+    return 0
+
+
+async def _run_research(arguments: argparse.Namespace) -> int:
+    sources = dict(arguments.source)
+    if len(sources) != len(arguments.source):
+        raise ValueError("duplicate research source identifier")
+    validate_research_inventory(sources)
+    task = TaskSpec(
+        arguments.task,
+        arguments.objective,
+        RunBudget(
+            max_steps=8,
+            max_model_calls=8,
+            max_browser_actions=7,
+            max_handoffs=0,
+            max_downloads=0,
+            max_consecutive_failures=1,
+            max_duration_seconds=120,
+        ),
+    )
+    runtime = PodmanBrowserRuntime(arguments.root, arguments.manifest)
+    config = OpenAIProviderConfig.from_env(model=arguments.model)
+    journal: Path = arguments.journal
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    os.close(os.open(journal, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+    async with StructuredAgentBackend(
+        OpenAIModelProvider(config),
+        system_instruction=RESEARCH_INSTRUCTION,
+        json_schema=RESEARCH_SCHEMA,
+    ) as agent:
+        result = await run_browser_research(
+            task,
+            sources,
+            runtime=runtime,
+            image_digest=runtime.image_digest,
+            agent=agent,
+            event_sink=JsonlEventLog(journal),
+        )
+    print(f"Research audit journal: {journal}")
+    if result.state is not RunState.COMPLETED:
+        print(f"research failed: {result.error}", file=sys.stderr)
+        return 1
     return 0
 
 

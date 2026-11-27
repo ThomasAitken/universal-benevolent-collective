@@ -75,6 +75,10 @@ class PodmanBrowserRuntime:
         self._sequence = 0
         self._events = asyncio.Queue[BoundaryEvent](maxsize=64)
 
+    @property
+    def image_digest(self) -> str:
+        return self._digest
+
     async def launch(self, spec: IsolatedBrowserLaunchSpec) -> "IsolatedBrowserSession":
         if sys.platform != "linux":
             raise IsolatedBrowserError("the isolated browser requires a Linux Podman host")

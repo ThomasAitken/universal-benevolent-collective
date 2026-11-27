@@ -1,7 +1,7 @@
 {
   "browser_image": {
-    "build_context_sha256": "sha256:799abee4e07a175139ad003c9cc2b6ec7fb168ef95d061cef5b437b9c3f4adce",
-    "digest": "sha256:29046130ca8f6c293033400ee9e9477b4c664c19a66c752c3a82ef2d47b2cb7e",
+    "build_context_sha256": "sha256:67dfc8022b4b2f239c56261a0abfbc87d40b2d5a36e052d91367d770de8b147b",
+    "digest": "sha256:2f0d38119c9936d4f189e95620462e1b7b2a25148d920ba3ed922e454fdabdb6",
     "reference": "localhost/ubc-browser"
   },
   "constitution": {
@@ -17,7 +17,7 @@
     "backend": "linux-rootful-podman-service",
     "contract_version": 2
   },
-  "release_id": "0.1.0-c04",
+  "release_id": "0.1.0-c05",
   "schema_version": 1,
   "trusted_core": {
     "audit_writer": {
@@ -43,7 +43,7 @@
     "supervisor": {
       "entrypoint": "ubc_node.supervisor:RunSupervisor",
       "path": "src/ubc_node/supervisor.py",
-      "sha256": "sha256:d339df788af65a541920f60bfa402c99e2c103d016da9eb0ef03730fc6f66682"
+      "sha256": "sha256:b9d20cffbb4470772159422f117da9e21ee18e9506961c119067b7514304c126"
     }
   }
 }
