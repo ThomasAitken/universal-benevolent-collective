@@ -6,7 +6,7 @@ import os
 import re
 import sqlite3
 import stat
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -93,24 +93,36 @@ class Record:
     artifact: bytes | None
 
 
+class CatalogueConnection(sqlite3.Connection):
+    clock: Callable[[], datetime]
+
+
 class ResearchCatalogue:
     """Trusted application API. A model receives bounded choices and proposals via its caller."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, clock: Callable[[], datetime] | None = None) -> None:
         self.root = root
+        self.clock = clock or now
 
     @contextmanager
-    def transaction(self, *, readonly: bool = False) -> Generator[sqlite3.Connection]:
+    def transaction(self, *, readonly: bool = False) -> Generator[CatalogueConnection]:
         self.root.mkdir(mode=0o700, exist_ok=True)
         info = self.root.lstat()
         if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
             raise ValueError("research root must be a private operator-owned directory")
         db_path = self.root / "research.sqlite3"
-        exists = db_path.exists()
-        with closing(sqlite3.connect(db_path)) as db, db:
+        with closing(sqlite3.connect(db_path, factory=CatalogueConnection)) as db, db:
+            db.clock = self.clock
             db.execute("PRAGMA foreign_keys = ON")
             db.execute("PRAGMA synchronous = FULL")
-            if not exists:
+            initialized = (
+                db.execute(
+                    "SELECT COUNT(*) FROM sqlite_master "
+                    "WHERE type = 'table' AND name IN ('records', 'dependencies', 'journal')"
+                ).fetchone()[0]
+                == 3
+            )
+            if not initialized:
                 db.executescript(_SCHEMA)
             if not readonly:
                 db.execute("BEGIN IMMEDIATE")
@@ -470,7 +482,7 @@ def active_project(db: sqlite3.Connection, task: str) -> str:
 
 
 def put(
-    db: sqlite3.Connection,
+    db: CatalogueConnection,
     key: str,
     kind: str,
     project: str | None,
@@ -499,7 +511,7 @@ def put(
         ):
             raise ValueError("conflicting retry")
         return previous
-    stamp = utc(now())
+    stamp = utc(db.clock())
     db.execute(
         "INSERT INTO records (id, kind, project, created_at, payload, artifact) VALUES (?, ?, ?, ?, ?, ?)",
         (key, kind, project, stamp, content.decode(), artifact),
@@ -512,10 +524,10 @@ def put(
 
 
 def journal(
-    db: sqlite3.Connection, task: str, kind: EventKind, state: RunState, data: Object
+    db: CatalogueConnection, task: str, kind: EventKind, state: RunState, data: Object
 ) -> None:
     sequence = int(db.execute("SELECT COALESCE(MAX(sequence), 0) + 1 FROM journal").fetchone()[0])
-    event = RunEvent(sequence, task, task, kind, state, now(), data)
+    event = RunEvent(sequence, task, task, kind, state, db.clock(), data)
     db.execute("INSERT INTO journal VALUES (?, ?)", (sequence, encode(event.to_record()).decode()))
 
 

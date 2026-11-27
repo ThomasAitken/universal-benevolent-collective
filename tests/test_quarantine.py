@@ -455,3 +455,97 @@ def test_stray_session_directory_does_not_block_new_attempt(
     with scanner_for(clamd, b"stream: OK\0", expected=_CLEAN) as scanner:
         release = _ingest(store, source, scanner)
     assert store.read_release(_SCOPE.project, release.receipt) == _CLEAN
+
+
+def test_reuse_release_matches_exact_released_scope_and_recovers_staging(
+    tmp_path: Path, clamd: tuple[Path, socket.socket]
+) -> None:
+    store = DownloadQuarantine(tmp_path / "store")
+    source = tmp_path / "download"
+    source.write_bytes(_CLEAN)
+    digest = hashlib.sha256(_CLEAN).hexdigest()
+
+    with scanner_for(clamd, b"stream: OK\0", expected=_CLEAN) as scanner:
+        first = _ingest(store, source, scanner)
+
+    # Default reuse_release=False scans again and creates a fresh acquisition.
+    with scanner_for(clamd, b"stream: OK\0", expected=_CLEAN) as scanner:
+        second = _ingest(store, source, scanner)
+    assert second.receipt != first.receipt
+
+    # reuse_release=True returns the first committed release without contacting clamd.
+    reused = store.ingest(
+        _SCOPE,
+        source,
+        "prices.csv",
+        expected_sha256=digest,
+        scanner=ClamAVScanner(Path("/unused")),
+        canaries=(_CANARY,),
+        reuse_release=True,
+    )
+    assert reused == first
+
+    # Simulate an uncleaned-but-released row and verify _recover runs before reuse.
+    pending = store.root / "pending" / f"{_SCOPE.session}-{first.receipt}"
+    pending.mkdir(parents=True, exist_ok=True)
+    (pending / "input").write_bytes(_CLEAN)
+    with closing(sqlite3.connect(store.root / "downloads.sqlite3")) as db, db:
+        db.execute("UPDATE acquisitions SET cleaned = 0 WHERE id = ?", (first.receipt,))
+    reused_after_crash = store.ingest(
+        _SCOPE,
+        source,
+        "prices.csv",
+        expected_sha256=digest,
+        scanner=ClamAVScanner(Path("/unused")),
+        canaries=(_CANARY,),
+        reuse_release=True,
+    )
+    assert reused_after_crash == first
+    assert not pending.exists()
+    assert store.inspect_acquisition(_SCOPE.project, first.receipt).cleaned is True
+
+    # Mismatched session, filename, or max_bytes must not reuse the prior release.
+    other_session = DownloadScope(_SCOPE.project, _SCOPE.task, "other-session", _SCOPE.source)
+    with pytest.raises(DownloadRejected, match="scanner_unavailable"):
+        store.ingest(
+            other_session,
+            source,
+            "prices.csv",
+            expected_sha256=digest,
+            scanner=ClamAVScanner(Path("/unused")),
+            canaries=(_CANARY,),
+            reuse_release=True,
+        )
+    with pytest.raises(DownloadRejected, match="scanner_unavailable"):
+        store.ingest(
+            _SCOPE,
+            source,
+            "other.csv",
+            expected_sha256=digest,
+            scanner=ClamAVScanner(Path("/unused")),
+            canaries=(_CANARY,),
+            reuse_release=True,
+        )
+    with pytest.raises(DownloadRejected, match="oversize"):
+        store.ingest(
+            _SCOPE,
+            source,
+            "prices.csv",
+            expected_sha256=digest,
+            scanner=ClamAVScanner(Path("/unused")),
+            canaries=(_CANARY,),
+            max_bytes=len(_CLEAN) - 1,
+            reuse_release=True,
+        )
+
+    # A rejected acquisition in a new session must not be reused.
+    with pytest.raises(DownloadRejected, match="scanner_unavailable"):
+        store.ingest(
+            other_session,
+            source,
+            "prices.csv",
+            expected_sha256=digest,
+            scanner=ClamAVScanner(Path("/unused")),
+            canaries=(_CANARY,),
+            reuse_release=True,
+        )

@@ -74,6 +74,11 @@ tasks:
     cmds:
       - uv run pytest tests/pilot/test_analysis_runner.py::test_linux_container_analysis --no-cov
 
+  pilot:
+    desc: Operate the local C07 two-cycle research fixture
+    cmds:
+      - uv run python -m tests.pilot.run_fixture {{.CLI_ARGS}}
+
   build:
     desc: Build the source distribution and wheel
     cmds:

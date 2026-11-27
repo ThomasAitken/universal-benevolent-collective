@@ -12,6 +12,11 @@ HTTP_PORT = 18765
 TLS_PORT = 18443
 DENIED_PORT = 18766
 
+PILOT_PAGES = {
+    "/pilot/v1": "NSW1 five-minute settlement prices in AUD/MWh. Initial release.",
+    "/pilot/v2": "NSW1 five-minute settlement prices in AUD/MWh. Corrected release.",
+}
+
 _RENDERER = f"""
 <h1>Renderer egress fixture</h1>
 <p id="status">Starting renderer requests</p>
@@ -58,6 +63,7 @@ async def _approved(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) 
                 b"localStorage.getItem('pilot') || 'Empty storage'</script>"
             ),
             b"/renderer": _RENDERER,
+            **{path.encode(): f"<h1>{text}</h1>".encode() for path, text in PILOT_PAGES.items()},
         }
         if path == b"/outside-redirect":
             status = b"302 Found"

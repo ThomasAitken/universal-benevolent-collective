@@ -1,6 +1,6 @@
 # Single-node research pilot roadmap
 
-- **Current focus** · C04 and C06 deployment acceptance
+- **Current focus** · C04, C06, and C07 deployment acceptance
 - **Delivery model** · Dependency-ordered commits to `main`
 - **Updated** · 2026-11-27
 
@@ -78,7 +78,7 @@ tracker records the resulting behaviour and residual limits.
 | C04 | implemented, deployment gate pending | C03 | Operator-imported, quarantined, scanned, content-addressed pilot CSVs |
 | C05 | done | C03 | Inventory-scoped Chromium evidence with provenance and a supervisor audit |
 | C06 | implemented, deployment gate pending | C01, C04 | Local research catalogue, isolated price analysis, thesis review, and forecast resolution |
-| C07 | queued | C05, C06 | Integrated two-cycle research pilot and operator acceptance |
+| C07 | fixture implemented, deployment and live acceptance pending | C05, C06 | Restartable two-cycle fixture, operator reviews, provenance checks, and forecast scoring |
 
 Public-page evidence and operator CSV acquisition can be accepted separately.
 Any future browser artifact handoff must use the C04 quarantine gate.
@@ -211,10 +211,27 @@ forecast outcomes, duplicate resolution, and corrections. `task check`
 passed with 100% statement and branch coverage. `task test-analysis-container`
 passed against a local Linux ARM64 Docker engine with cgroup v2. Repeat the
 analysis gate and the pending C04 gate on the intended pilot deployment.
-The integrated two-cycle driver remains C07.
+The C07 fixture drives these records through the two-cycle workflow.
 [Operator API and analysis gate](c06-research-records.md)
 
 ## C07 — Integrated pilot and acceptance
+
+The deterministic workflow is available as `task pilot`. Two invocations
+share a private catalogue and pause for human review. A fresh process
+discovers the baseline dependencies after approval, reruns the corrected
+dataset, scores the frozen forecast, and queues a follow-up charter.
+Process-exit tests exercise retries after quarantine release, analysis,
+proposal submission, and scoring. The local fixture uses a synthetic
+browser session and ClamAV protocol responder by default, with the pinned
+analysis worker in the local container engine.
+[Operator runbook](c07-pilot-runbook.md)
+
+The local Docker run reproduced the baseline dataset and traced a sample to
+CSV line 3. The correction changed the negative count from one to two. The
+forecast Brier score was 0.0625 and the baseline score was 0.25. The local
+smoke test used synthetic review decisions. Human review, integrated
+Chromium and ClamAV on the intended deployment, and live-source evidence
+remain pending.
 
 Provide one local command and an operator runbook for the two-cycle fixture.
 Document setup, source configuration, run, pause, revoke, retry, diagnostics,

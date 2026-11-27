@@ -1,7 +1,7 @@
 {
   "browser_image": {
-    "build_context_sha256": "sha256:de9d97142c885c2a507c74a34af6ced0a23d29e2bcf8c02a4f692cba618bf98a",
-    "digest": "sha256:3a3215e1457b7537e5eb7dc418f1513e3c21bac8ec3b51773cf0cfc087a04619",
+    "build_context_sha256": "sha256:c84dfd8fb8b475e996448e9db2e80949773b2abf9805d034d98471d6c2118d1a",
+    "digest": "sha256:3f38d3e213f066eef7e46d5187bfbbd44f3e9becdf5d8f0ff096bd26428e0335",
     "reference": "localhost/ubc-browser"
   },
   "constitution": {
@@ -17,7 +17,7 @@
     "backend": "linux-rootful-podman-service",
     "contract_version": 2
   },
-  "release_id": "0.1.0-c06",
+  "release_id": "0.1.0-c07",
   "schema_version": 1,
   "trusted_core": {
     "audit_writer": {
@@ -28,7 +28,7 @@
     "download_quarantine": {
       "entrypoint": "ubc_node.quarantine:DownloadQuarantine",
       "path": "src/ubc_node/quarantine.py",
-      "sha256": "sha256:58b76f3872385a07cd98317e8fd06cc871ba5a2ac869564b44ca6c9f7b7bfab2"
+      "sha256": "sha256:dfd1ba5dddeed13e903a044a2fbc8fb78892be781ef073993e6826b6519d1b65"
     },
     "executable_policy": {
       "entrypoint": "ubc_node.policy:PrototypePolicyEvaluator",

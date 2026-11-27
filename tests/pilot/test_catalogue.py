@@ -13,21 +13,14 @@ from jsonschema.exceptions import ValidationError
 
 from tests.clamd_fixture import clamd_fixture as clamd_fixture
 from tests.clamd_fixture import scanner_for
-from tests.pilot.fixtures import BASE, HEADER, OUTCOME, SOURCE, START, WINDOW
+from tests.pilot.fixtures import AUTHOR, BASE, HEADER, OUTCOME, SOURCE, START, WINDOW
+from tests.pilot.fixtures import draft_thesis as _draft
 from ubc_node import quarantine
-from ubc_node.pilot import catalogue, forecasts, thesis_review
 from ubc_node.pilot.analysis_runner import AnalysisError, AnalysisRunner, PriceWindow
-from ubc_node.pilot.catalogue import Object, Record, ResearchCatalogue, digest, object_value
+from ubc_node.pilot.catalogue import Record, ResearchCatalogue, digest, object_value
 from ubc_node.pilot.forecasts import freeze_question, resolve_forecast, submit_forecast
 from ubc_node.pilot.thesis_review import Decision, ThesisReview
 from ubc_node.quarantine import DownloadQuarantine, DownloadScope
-
-AUTHOR: Object = {
-    "actor_type": "agent",
-    "actor_id": "agent-123",
-    "display_name": None,
-    "model": {"model_profile_id": "model-123", "provider": "fixture", "model_name": "test"},
-}
 
 
 @dataclass
@@ -92,8 +85,7 @@ def pilot(
     def clock() -> datetime:
         return pilot.when
 
-    for module in (catalogue, forecasts, thesis_review):
-        monkeypatch.setattr(module, "now", clock)
+    pilot.catalogue.clock = clock
 
     class QuarantineClock(datetime):
         @classmethod
@@ -229,7 +221,7 @@ def test_source_analysis_reproduction_and_forecast(pilot: Pilot, runner: Analysi
         resolve_forecast(cat, question.id, analysis.id)
 
     pilot.when += timedelta(hours=2)
-    fresh = ResearchCatalogue(cat.root)
+    fresh = ResearchCatalogue(cat.root, clock=cat.clock)
     task = pilot.task("second")
     second = pilot.source(task, "v2", OUTCOME, first.id)
     updated = fresh.analyse(task, second.id, runner)
@@ -253,85 +245,6 @@ def test_source_analysis_reproduction_and_forecast(pilot: Pilot, runner: Analysi
     assert revised_score.data["outcome"] == 0
     assert fresh.get(score.id) == score
     assert fresh.get(forecast.id) == forecast
-
-
-def _draft(source: Record, revision_id: str = "revision_first000") -> Object:
-    as_of = START.isoformat()
-    source_id = "source_fixture123"
-    return {
-        "schema_version": "1.0.0",
-        "thesis_id": "thesis_fixture0123",
-        "revision": {
-            "revision_id": revision_id,
-            "revision_number": 1,
-            "previous_revision_id": None,
-            "change_type": "creation",
-            "change_summary": "Baseline.",
-            "content_hash": None,
-        },
-        "language": "en",
-        "statement": "One of two NSW1 fixture intervals had a negative price.",
-        "description": "Two consecutive five-minute intervals.",
-        "thesis_type": "descriptive",
-        "domains": ["electricity"],
-        "keywords": ["project-prices"],
-        "content_license": "CC0-1.0",
-        "attribution_notice": "Synthetic fixture.",
-        "epistemic_assessment": {
-            "confidence_method": "basis_matrix_v1",
-            "theoretical_basis": {
-                "strength": "none",
-                "explanation": "Descriptive.",
-                "source_ids": [],
-                "limitations": [],
-            },
-            "empirical_basis": {
-                "strength": "low",
-                "explanation": "Two intervals.",
-                "source_ids": [source_id],
-                "limitations": [],
-            },
-            "scientific_consensus": None,
-            "last_assessed_at": as_of,
-        },
-        "sources": [
-            {
-                "source_id": source_id,
-                "resource_type": "dataset",
-                "title": "Fixture CSV",
-                "authors": [],
-                "publisher": "",
-                "publication_year": 2026,
-                "url": SOURCE,
-                "archived_url": None,
-                "identifiers": {"doi": None, "pmid": None, "arxiv": None, "isbn": None},
-                "peer_review_status": "not_applicable",
-                "accessed_at": as_of,
-                "source_snapshot_id": source.id,
-                "status_at_revision": "active",
-                "status_checked_at": as_of,
-            }
-        ],
-        "evidence": [
-            {
-                "evidence_id": "evidence-123",
-                "source_id": source_id,
-                "stance": "supports",
-                "evidence_role": "key",
-                "claim_or_finding": "One negative interval.",
-                "explanation": "The sampled row is negative.",
-                "locator": "CSV line 3",
-                "verification_status": "content_checked",
-                "independence_cluster": None,
-                "added_at": as_of,
-            }
-        ],
-        "hierarchy": {"parent_theses": []},
-        "related_theses": [],
-        "open_questions": [],
-        "thesis_created_at": as_of,
-        "revision_created_at": as_of,
-    }
 
 
 def _review(review: ThesisReview, proposal: Record, reviewer: str = "reviewer-123") -> Record:

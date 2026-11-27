@@ -233,8 +233,13 @@ class DownloadQuarantine:
         scanner: ClamAVScanner,
         canaries: tuple[bytes, ...],
         max_bytes: int = MAX_DOWNLOAD_BYTES,
+        reuse_release: bool = False,
     ) -> DownloadRelease:
-        """Import a completed, operator-held file into private per-session staging."""
+        """Import a completed, operator-held file into private per-session staging.
+
+        The operator can resume an already approved acquisition with reuse_release.
+        Use a new session when the scanner or canary policy changes.
+        """
         if not 1 <= max_bytes <= MAX_DOWNLOAD_BYTES:
             raise ValueError("invalid download byte limit")
         if not _SHA256.fullmatch(expected_sha256):
@@ -245,6 +250,26 @@ class DownloadQuarantine:
         staging = self._staging(scope.session, receipt)
         with self._database() as db:
             self._recover(db)
+            if reuse_release:
+                previous = db.execute(
+                    """
+                    SELECT id, release_digest, size FROM acquisitions
+                    WHERE project = ? AND task = ? AND session = ? AND source = ?
+                        AND filename = ? AND release_digest = ? AND size <= ?
+                    ORDER BY rowid LIMIT 1
+                    """,
+                    (
+                        scope.project,
+                        scope.task,
+                        scope.session,
+                        scope.source,
+                        filename,
+                        expected_sha256,
+                        max_bytes,
+                    ),
+                ).fetchone()
+                if previous is not None:
+                    return DownloadRelease(str(previous[0]), str(previous[1]), int(previous[2]))
             with db:
                 db.execute(
                     "INSERT INTO acquisitions (id, project, task, session, source, "

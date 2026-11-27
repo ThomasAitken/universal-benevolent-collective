@@ -31,8 +31,8 @@ def read_scan(channel: socket.socket) -> bytes:
     return bytes(received)
 
 
-@pytest.fixture(name="clamd")
-def clamd_fixture() -> Generator[tuple[Path, socket.socket]]:
+@contextmanager
+def clamd_listener() -> Generator[tuple[Path, socket.socket]]:
     with (
         tempfile.TemporaryDirectory(dir="/tmp", prefix="ubc-scan-") as directory,
         socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener,
@@ -42,6 +42,12 @@ def clamd_fixture() -> Generator[tuple[Path, socket.socket]]:
         listener.listen()
         listener.settimeout(5)
         yield endpoint, listener
+
+
+@pytest.fixture(name="clamd")
+def clamd_fixture() -> Generator[tuple[Path, socket.socket]]:
+    with clamd_listener() as listener:
+        yield listener
 
 
 @contextmanager

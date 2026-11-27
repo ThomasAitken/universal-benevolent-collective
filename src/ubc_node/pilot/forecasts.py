@@ -10,7 +10,6 @@ from ubc_node.pilot.catalogue import (
     find,
     id_value,
     note,
-    now,
     object_value,
     put,
     read,
@@ -48,7 +47,9 @@ def freeze_question(
             or utc(cutoff) >= utc(deadline)
         ):
             raise ValueError("invalid threshold or cutoff")
-        if find(db, key) is None and (utc(now()) >= utc(deadline) or find(db, target) is not None):
+        if find(db, key) is None and (
+            utc(db.clock()) >= utc(deadline) or find(db, target) is not None
+        ):
             raise ValueError("forecast question must precede deadline and outcome")
         return put(
             db,
@@ -89,7 +90,7 @@ def submit_forecast(
         key = f"forecast:{question.id}"
         data = question.data
         if find(db, key) is None and (
-            not str(data["cutoff"]) <= utc(now()) < str(data["deadline"])
+            not str(data["cutoff"]) <= utc(db.clock()) < str(data["deadline"])
             or analysis.created_at > str(data["cutoff"])
             or find(db, str(data["target"])) is not None
         ):
@@ -138,9 +139,12 @@ def resolve_forecast(
             ):
                 raise ValueError("expected a direct correction to this forecast's resolution")
             inputs = (forecast_id, analysis_id, supersedes)
-        if str(source.data["released_at"]) <= str(question.data["deadline"]) or utc(now()) <= str(
-            question.data["deadline"]
-        ):
+        if find(db, key) is None:
+            task = next(item for item in analysis.inputs if item.startswith("task-"))
+            active_project(db, task)
+        if str(source.data["released_at"]) <= str(question.data["deadline"]) or utc(
+            db.clock()
+        ) <= str(question.data["deadline"]):
             raise ValueError("outcome was available before deadline or is still pending")
         diagnostics = object_value(analysis.data["diagnostics"])
         outcome = int(int(str(diagnostics["negative"])) >= int(str(question.data["threshold"])))

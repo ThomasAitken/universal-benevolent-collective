@@ -1,12 +1,13 @@
 # C06 local research catalogue
 
 C06 provides a trusted operator Python API in `ubc_node.pilot` for a single
-programme workspace. The component gate exercises synthetic data. C07 will
-connect the API to the agent and
-browser workflow. Keep the catalogue, checkout, schemas and container engine
-under operator control. A model caller can bind an owner grant and task to
-specific choices, pinned reads and proposal submissions. The operator retains
-source acquisition, review, scoring, and engine authority.
+programme workspace. The component gate exercises synthetic data. The
+[C07 fixture](c07-pilot-runbook.md) connects the API to a deterministic
+agent and the browser research workflow. Keep the catalogue, checkout,
+schemas and container engine under operator control. A model caller can
+bind an owner grant and task to specific choices, pinned reads and proposal
+submissions. The operator retains source acquisition, review, scoring, and
+engine authority.
 
 ## Work with a local catalogue
 

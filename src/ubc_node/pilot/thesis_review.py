@@ -21,7 +21,6 @@ from ubc_node.pilot.catalogue import (
     encode,
     find,
     note,
-    now,
     object_value,
     put,
     read,
@@ -278,7 +277,7 @@ class ThesisReview:
                 revision = object_value(draft)
                 metadata = object_value(revision["revision"])
                 revision_id = metadata["revision_id"]
-            stamp = utc(now())
+            stamp = utc(db.clock())
             status = _REVIEW_STATUS[decision]
             workflow: Object = {
                 "schema_version": "1.0.0",
