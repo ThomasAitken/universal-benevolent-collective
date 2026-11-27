@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from ubc_node.browser.browser_contracts import BrowserSessionState
+from ubc_node.browser.browser_contracts import BrowserSessionConfig, BrowserSessionState
 from ubc_node.browser.isolation import isolated_browser, isolated_worker
 from ubc_node.browser.isolation.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
 from ubc_node.browser.isolation.isolation_contracts import (
@@ -373,6 +373,24 @@ async def test_worker_rejects_invalid_startup(init: Mapping[str, object] | None)
             with pytest.raises(BrowserWorkerError, match="startup frame"):
                 await task
             assert await client_reader.read() == b""
+
+
+async def test_isolated_browser_leaves_denied_shutdown_signal_to_broker(tmp_path: Path) -> None:
+    stagehand = Mock(close=AsyncMock())
+    browser = Mock(closed=False, close=AsyncMock(side_effect=PermissionError))
+    adapter = isolated_worker._IsolatedBrowserAdapter(
+        config=BrowserSessionConfig(
+            workspace=tmp_path, allowed_origins=frozenset({FIXTURE_ORIGIN})
+        ),
+        browser=browser,
+        stagehand=stagehand,
+    )
+
+    await adapter.close()
+
+    assert adapter.state is BrowserSessionState.CLOSED
+    stagehand.close.assert_awaited_once()
+    browser.close.assert_awaited_once()
 
 
 @pytest.mark.parametrize("outcome", ["ok", "startup-write", "startup-fail", "already-closed"])

@@ -4,7 +4,7 @@ import asyncio
 import socket
 import sys
 from collections.abc import AsyncGenerator, Mapping
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import cast
 
@@ -56,6 +56,14 @@ async def _proxy() -> AsyncGenerator[str]:
         await server.wait_closed()
 
 
+class _IsolatedBrowserAdapter(StagehandBrowserAdapter):
+    async def _shutdown(self) -> None:
+        # Host policy can deny Stagehand's fallback signal to Chromium. The
+        # broker retires the whole container when this worker closes its channel.
+        with suppress(PermissionError):
+            await super()._shutdown()
+
+
 class _IsolatedWorkerService(BrowserWorkerService):
     async def _dispatch(
         self, operation: str, parameters: Mapping[str, object]
@@ -81,7 +89,7 @@ async def _serve(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> 
         async with _proxy() as endpoint:
             lease = SessionLease(LeaseConfig())
             debugging_port = available_loopback_port()
-            browser = await StagehandBrowserAdapter.launch_local(
+            browser = await _IsolatedBrowserAdapter.launch_local(
                 BrowserSessionConfig(
                     workspace=Path("/var/lib/ubc/quarantine"),
                     allowed_origins=frozenset(cast(list[str], origins)),

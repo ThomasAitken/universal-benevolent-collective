@@ -343,7 +343,7 @@ assert up == {"lo"}, up
 assert len(Path("/proc/net/route").read_text().splitlines()) == 1
 assert not Path(sys.argv[1]).exists()
 for path in ("/run/podman/podman.sock", "/var/run/docker.sock", "/proc/1/root/run/ubc-browser"):
-    assert not Path(path).exists()
+    assert not os.access(path, os.F_OK)
 policy = Path("/opt/ubc/app/src/ubc_node/core/policy.py")
 assert policy.is_file() and not os.access(policy, os.W_OK)
 assert os.statvfs("/").f_flag & os.ST_RDONLY

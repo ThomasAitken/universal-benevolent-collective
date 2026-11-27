@@ -155,6 +155,44 @@ and exit with a nonzero status.
   follow the [isolation fixture teardown](trusted-core-and-isolation.md#c03-acceptance) for
   the fixture containers, network, and image.
 
+## Provision a Linux VM on macOS
+
+On Apple Silicon, use Lima 2.3 or later with the repository's VZ template.
+The template pins a Debian 13 ARM64 image by SHA-512 and gives the guest
+two CPUs, 4 GiB of RAM, and a 20 GiB disk. Lima's plain mode disables host
+filesystem mounts, dynamic port forwarding, and SSH agent forwarding.
+Lima exposes its management SSH connection on host loopback.
+
+From the repository root on the Mac, run:
+
+```sh
+brew install lima
+sh vm/start-mac.sh
+```
+
+The script starts `ubc-pilot`, installs the guest's container and Python
+tooling, and copies the current Git commit into the guest over SSH. The
+`ubc-node` account owns a detached checkout and its locked Python environment.
+The script runs `ubc doctor` there before updating `~/checkout` to point to
+that revision. Rerun the command to start the VM again or provision a new
+host commit. A new commit gets its own checkout. If a checkout for the same
+commit has local edits, provisioning stops and keeps the edits. Pass an
+instance name to the script to create a separate VM from the template.
+
+Open a shell as the node account and inspect the provisioned revision:
+
+```sh
+limactl shell --workdir /tmp ubc-pilot -- sudo -iu ubc-node
+cd ~/checkout
+git rev-parse HEAD
+uv run --locked ubc doctor
+```
+
+Exit the guest shell and use `limactl stop ubc-pilot` to stop the VM while
+keeping its disk. This setup prepares the Linux guest. Continue with the
+deployment procedure to install the browser launcher and configure its
+image, network, and scanner.
+
 ## Intended Linux deployment
 
 Install the matching launcher and current browser image on the intended
@@ -190,6 +228,43 @@ configured model run, and recorded source and tool limitations. Keep a live
 forecast pending until its named outcome is published. Use those deployment
 and live results to record the go/no-go decision for a private multi-node
 trial.
+
+### Run the Linux fixture with rootless Podman
+
+On the Debian guest, use local rootless Podman with `runc` for analysis.
+The guest's `crun` version fails to install the analysis worker's seccomp
+filter with its zero file-size limit. The browser broker uses rootful
+Podman with `crun`. Select `runc` in the node user's containers configuration
+and provision the pinned analysis image into that user's image store. The
+node user's systemd session needs delegated CPU, memory, and process
+controllers to enforce the worker's limits.
+
+If entering the node account with `sudo -iu ubc-node`, enable lingering for
+that account as the guest administrator. In the node shell, set the user bus
+environment and run the analysis gate:
+
+```sh
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+UBC_ANALYSIS_ENGINE=podman task test-analysis-container
+```
+
+Set these paths to the fixture manifest and private ClamAV socket from the
+deployment setup. Pass the same settings to both cycles and use the same
+analysis engine for verification:
+
+```sh
+workspace=.ubc/pilot-deployment
+browser_manifest=.ubc/pilot-fixture-manifest.json
+scanner_socket=/run/ubc-clamav-fixture/clamd.ctl
+task pilot -- run --workspace "$workspace" --engine podman \
+  --browser-manifest "$browser_manifest" --scanner-socket "$scanner_socket"
+task pilot -- verify --workspace "$workspace" --engine podman
+```
+
+Follow the review steps above. After baseline approval, add `--cycle 2` to
+the run command. If the scanner uses a dedicated group, open a fresh node
+shell after adding the account to that group.
 
 ## Analysis container gate
 

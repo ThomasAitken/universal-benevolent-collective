@@ -52,6 +52,9 @@ writer; they are not direct writes to the core journal.
 
 ## Build and install the runtime
 
+On an Apple Silicon Mac, the pilot runbook covers preparing a Debian guest
+for this procedure. [Provision a Linux VM](pilot-runbook.md#provision-a-linux-vm-on-macos)
+
 Use a disposable Linux test host. With a Docker build host and rootful Podman
 available on the test host, build and load the same named OCI image:
 
