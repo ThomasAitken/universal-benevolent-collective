@@ -33,6 +33,7 @@ The trusted core consists of:
 - the supervisor entry point;
 - the executable policy evaluator;
 - the core audit writer;
+- the pilot quarantine and artifact release service;
 - the signing-only node-key interface;
 - the constitution version and content digest;
 - the dependency lock; and
@@ -222,3 +223,84 @@ terminates the parent, worker, runtime, broker, and gate separately. Both
 containers must be removed after termination. Discard the fixture host, or
 stop the launcher and remove the two fixture containers, fixture network,
 configuration and derived image before reusing it.
+
+## C04 download quarantine
+
+The operator selects the source, obtains a completed local file and records
+the SHA-256 of the complete approved version before import. Use a publisher
+checksum or a digest from a verified completed acquisition. The store checks
+the expected digest even when a truncated file is still valid CSV. The input
+file and its parent directories should be under operator control. The
+browser has no quarantine export operation in this release.
+
+Use a dedicated root on a local filesystem outside task workspaces, owned by
+the importing node account with mode `0700`. Its parent must also be under
+operator control. The gate accepts one format up to 8 MiB, with a portable
+`.csv` basename and ASCII LF-delimited records:
+
+```csv
+interval_utc,region,price
+2026-01-01T00:00:00Z,NSW1,-12.30
+```
+
+Each row uses a UTC calendar timestamp at second precision, a National
+Electricity Market region code, and a signed decimal price with up to six
+integer and six fractional digits. The fixed fields exclude names, email
+addresses, free text and spreadsheet formulas. An operator provides 1 to 32
+exact canary values of 1 to 256 bytes each in an operator-owned, regular
+mode-`0600` file, one per line. This policy screens the admitted format and
+known canaries. Source classification, publication rights, and statistical
+validation belong to the programme's source and analysis records.
+
+Use an operator-managed ClamAV daemon with maintained signatures, a separate
+unprivileged service account, and a filesystem socket whose directory and
+permissions restrict access to the node and scanner. Give the daemon
+private temporary storage and keep the node store, keys, and audit storage
+outside its access. Use service-level CPU, memory and process limits.
+The client submits only bytes, caps the reply, and applies a 60-second
+deadline. Configure at least the following scan limits and set a service
+memory budget sufficient for the installed signature database.
+[ClamAV daemon protocol](https://docs.clamav.net/manual/Usage/ClamdProtocol.html)
+
+```text
+StreamMaxLength 16M
+MaxFileSize 16M
+MaxScanSize 16M
+AlertExceedsMax yes
+ScanArchive no
+```
+
+```shell
+uv run ubc quarantine --store /path/to/private-store import /path/to/completed.csv \
+  --filename prices.csv --project electricity --task baseline --session baseline-1 \
+  --source https://data.example/prices.csv --expected-sha256 "$approved_digest" \
+  --scanner-socket /run/clamav/clamd.ctl --canaries-file /path/to/private-canaries
+uv run ubc quarantine --store /path/to/private-store recover
+```
+
+Import prints a receipt ID, SHA-256, and byte count. Trusted node code can use
+`DownloadQuarantine.read_release(project, receipt)` to fetch the released
+bytes and `DownloadQuarantine.inspect_acquisition(project, receipt)` to read
+typed provenance and ordered audit events without querying SQLite directly.
+The operator-owned SQLite journal records scope, source, timestamps, digest,
+byte count, scan policy and decisions without putting file contents or canary
+values into event rows; keeping artifacts and events in one database commits
+release content, provenance, and the release audit event atomically. Recovery
+runs explicitly or before the next import, expires interrupted attempts and
+removes their staging directories. The operator retains responsibility for the
+original local input file.
+
+Run `uv run pytest tests/test_quarantine.py --no-cov` for the deterministic
+gate. On the pilot deployment, certify the scanner using a disposable
+signature database and a benign CSV fixture signature with the opt-in gate:
+
+```shell
+UBC_CLAMD_SOCKET=/run/clamav/clamd.ctl \
+  UBC_CLAMD_FLAGGED_CSV=/path/to/flagged-fixture.csv \
+  task test-quarantine-scanner
+```
+
+Verify the node releases a clean fixture, rejects the matching fixture, and
+rejects imports with the daemon stopped. Verify that the scanner identity
+cannot traverse the store, read node keys or write node audit files. Repeat
+the C03 acceptance on the intended launcher before live-source work.

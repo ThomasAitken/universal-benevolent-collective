@@ -60,6 +60,13 @@ tasks:
     cmds:
       - uv run pytest -m isolated_browser --no-cov
 
+  test-quarantine-scanner:
+    desc: Run the opt-in C04 quarantine gate against a local ClamAV daemon socket
+    env:
+      UBC_RUN_QUARANTINE_SCANNER_E2E: "1"
+    cmds:
+      - uv run pytest -m quarantine_scanner --no-cov
+
   build:
     desc: Build the source distribution and wheel
     cmds:

@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import platform
+import sqlite3
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import NoReturn
 
 from ubc_node import __version__
 from ubc_node.demo import DemoCancelled, DemoError, run_phase5_demo
+from ubc_node.quarantine import ClamAVScanner, DownloadQuarantine, DownloadScope, load_canaries
 from ubc_node.release_manifest import (
     ReleaseManifestError,
     create_release_manifest,
@@ -35,6 +37,20 @@ def _build_parser() -> argparse.ArgumentParser:
     manifest.add_argument("--browser-image-reference", required=True)
     manifest.add_argument("--browser-image-digest", required=True)
     manifest.add_argument("--output", type=Path, required=True)
+    quarantine = subcommands.add_parser("quarantine", help="Manage pilot download quarantine.")
+    quarantine.add_argument("--store", type=Path, required=True)
+    quarantine_commands = quarantine.add_subparsers(dest="quarantine_command", required=True)
+    ingest = quarantine_commands.add_parser("import", help="Scan and release a completed CSV.")
+    ingest.add_argument("file", type=Path)
+    ingest.add_argument("--filename", required=True, help="Filename offered by the source.")
+    ingest.add_argument("--project", required=True)
+    ingest.add_argument("--task", required=True)
+    ingest.add_argument("--session", required=True)
+    ingest.add_argument("--source", required=True, help="Public source URL without a query.")
+    ingest.add_argument("--expected-sha256", required=True, help="Digest of the complete file.")
+    ingest.add_argument("--scanner-socket", type=Path, required=True, help="Private clamd socket.")
+    ingest.add_argument("--canaries-file", type=Path, required=True, help="One literal per line.")
+    quarantine_commands.add_parser("recover", help="Expire and clean interrupted imports.")
     demo = subcommands.add_parser("demo", help="Run or resume the Phase 5 fixture demonstration.")
     demo.add_argument(
         "--workspace",
@@ -89,6 +105,8 @@ def run(argv: Sequence[str] | None = None) -> int:
             print(f"release manifest failed: {error}", file=sys.stderr)
             return 1
         print(f"Release manifest: {arguments.output}")
+    elif arguments.command == "quarantine":
+        return _run_quarantine(arguments)
     elif arguments.command == "demo":
         try:
             result = asyncio.run(
@@ -116,6 +134,32 @@ def run(argv: Sequence[str] | None = None) -> int:
     else:
         parser.print_help()
 
+    return 0
+
+
+def _run_quarantine(arguments: argparse.Namespace) -> int:
+    store = DownloadQuarantine(arguments.store)
+    try:
+        if arguments.quarantine_command == "recover":
+            store.recover()
+            return 0
+        scope = DownloadScope(
+            arguments.project, arguments.task, arguments.session, arguments.source
+        )
+        release = store.ingest(
+            scope,
+            arguments.file,
+            arguments.filename,
+            expected_sha256=arguments.expected_sha256,
+            scanner=ClamAVScanner(arguments.scanner_socket),
+            canaries=load_canaries(arguments.canaries_file),
+        )
+    except KeyboardInterrupt:
+        return 130
+    except (ValueError, OSError, sqlite3.Error) as error:
+        print(f"quarantine failed: {error}", file=sys.stderr)
+        return 1
+    print(f"{release.receipt} sha256:{release.sha256} {release.size}")
     return 0
 
 

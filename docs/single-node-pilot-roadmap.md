@@ -75,7 +75,7 @@ tracker records the resulting behaviour and residual limits.
 | C01 | done | Prototype baseline | Constitution-bound trusted-core manifest, pinned non-root browser image, isolation contracts, and fixture topology |
 | C02 | done | C01 | Offline Chromium in the Linux isolation boundary with terminal session failure |
 | C03 | done | C02 | Private per-session egress gate with HTTP/HTTPS Chromium and zero-contact fixtures |
-| C04 | queued | C03 | Quarantined, scanned, content-addressed research downloads |
+| C04 | implemented, deployment gate pending | C03 | Operator-imported, quarantined, scanned, content-addressed pilot CSVs |
 | C05 | queued | C03, C04 | Bounded model-assisted evidence collection through the isolated browser |
 | C06 | queued | C01, C04 | Local research records, reproducible analysis, thesis review, and forecast resolution |
 | C07 | queued | C05, C06 | Integrated two-cycle research pilot and operator acceptance |
@@ -115,25 +115,31 @@ or leave it out of the pilot.
 
 ## C04 — Quarantine, scan, and release downloads
 
-- Receive into per-session quarantine outside task workspaces. Enforce a
-  streaming byte limit and SHA-256 digest. Track `receiving`, `quarantined`,
-  `scanning`, `released`, `rejected`, and `expired` states.
-- Validate normalised names, regular-file status, actual type, archive depth,
-  count and expanded size, and executable-content policy. Scan for malware,
-  secret canaries, and sensitive data, with a deny by default for scanner
-  failure or an unavailable required scanner.
-- Promote only clean, complete content by digest. Bind the result to the
-  project, task, session, source, and scan decisions. Audit receipt, decision,
-  release, and cleanup without copying file contents into the journal.
-- Demonstrate clean-file release and rejection for oversize, traversal,
-  symlink, malware, archive bomb, secret canary, and scanner failure. Show
-  that cancellation, crash, and repeated cleanup never publish partial or
-  unscanned bytes. Keep rejected and expired files inaccessible and clean
-  them up on restart where needed.
+The first pilot accepts only the documented electricity-price CSV format.
+The operator imports a completed file with an expected SHA-256 from the
+approved source record. The node streams it into private per-session
+quarantine, validates its name, type and digest, checks configured secret
+canaries, and requires a clean verdict from a private ClamAV daemon.
+The fixed schema excludes free-text and formula fields. Archives and
+executables are rejected before parsing. Treat every release as untrusted
+analysis input.
 
-The gate includes the file types selected for the pilot research question.
-Exercise document parsing inside a bounded process where the programme
-requires it. Treat scanner-approved files as untrusted analysis inputs.
+The store records receipt, quarantine, scanning, release or rejection,
+expiry, and cleanup. Release commits content, provenance, and its audit
+event together. Each import retains its own project, task, session and
+source receipt, even when its bytes already exist by digest.
+
+Fixture acceptance covers clean scoped release, oversize, traversal,
+symlinks, non-regular files, a truncated CSV prefix, a disguised archive,
+executable and formula content, a secret canary, malware and scanner failure
+verdicts, cancellation, process death during scanning, and idempotent recovery.
+A real ClamAV daemon in a disposable, network-disabled Linux container
+released the clean CSV, flagged a benign fixture signature, and caused
+import rejection after shutdown. Its scanner account could not traverse the
+node store. Run the deployment gate with the configured scanner and repeat
+applicable C03 acceptance before pilot use. Browser artifact export stays
+disabled until an explicit handoff can use the quarantine gate.
+[Operator procedure and deployment gate](trusted-core-and-isolation.md#c04-download-quarantine)
 
 ## C05 — Isolated browser research
 

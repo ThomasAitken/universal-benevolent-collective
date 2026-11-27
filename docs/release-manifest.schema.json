@@ -59,6 +59,9 @@
         "audit_writer": {
           "$ref": "#/$defs/component"
         },
+        "download_quarantine": {
+          "$ref": "#/$defs/component"
+        },
         "executable_policy": {
           "$ref": "#/$defs/component"
         },
@@ -73,6 +76,7 @@
         "supervisor",
         "executable_policy",
         "audit_writer",
+        "download_quarantine",
         "node_key_interface"
       ],
       "type": "object"

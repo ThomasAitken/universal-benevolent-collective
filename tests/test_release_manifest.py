@@ -44,6 +44,7 @@ def test_manifest_binds_every_required_input_and_verifies() -> None:
         "executable_policy",
         "audit_writer",
         "node_key_interface",
+        "download_quarantine",
     }
     isolation = cast(dict[str, object], manifest["isolation"])
     assert isolation["backend"] == PRIMARY_ISOLATION_BACKEND
@@ -201,6 +202,7 @@ def test_manifest_schema_declares_closed_required_contract() -> None:
         "executable_policy",
         "audit_writer",
         "node_key_interface",
+        "download_quarantine",
     }
 
 
@@ -218,6 +220,7 @@ def test_browser_context_digest_tracks_nested_src_files_and_ignores_caches(
         "src/ubc_node/policy.py",
         "src/ubc_node/event_log.py",
         "src/ubc_node/node_keys.py",
+        "src/ubc_node/quarantine.py",
         "src/ubc_node/py.typed",
     ):
         file_path = tmp_path / relative_path

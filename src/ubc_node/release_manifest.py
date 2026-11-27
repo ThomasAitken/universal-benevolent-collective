@@ -21,6 +21,10 @@ _CORE_COMPONENTS: Mapping[str, tuple[str, str]] = {
     ),
     "audit_writer": ("src/ubc_node/event_log.py", "ubc_node.event_log:JsonlEventLog"),
     "node_key_interface": ("src/ubc_node/node_keys.py", "ubc_node.node_keys:NodeKey"),
+    "download_quarantine": (
+        "src/ubc_node/quarantine.py",
+        "ubc_node.quarantine:DownloadQuarantine",
+    ),
 }
 _BROWSER_STATIC_INPUTS = (
     "browser-runtime/Dockerfile",

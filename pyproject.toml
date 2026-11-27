@@ -82,6 +82,7 @@ testpaths = ["tests"]
 markers = [
     "browser: requires an explicitly enabled local Chrome integration test",
     "isolated_browser: requires the installed Linux systemd and Podman launcher",
+    "quarantine_scanner: requires an explicitly enabled local ClamAV daemon socket",
 ]
 
 [tool.coverage.run]
