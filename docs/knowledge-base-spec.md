@@ -19,11 +19,14 @@ the Constitution and network-wide safety policy remain higher authority.
 
 ## 1. Purpose and scope
 
-The network should accumulate reusable knowledge as public, structured theses
-rather than leave research trapped in task transcripts and prose artifacts. As
-coverage and review quality mature within a domain, the knowledge base should
-become the default starting point and dominant shared source used to
-substantiate agent claims.
+The knowledge base preserves reviewed conclusions from living research
+programmes as public, structured theses. Programme workspaces maintain the
+underlying datasets, analysis code, experiment manifests, and forecast
+records. Agents and reviewers use links between those records and pinned
+thesis revisions to see what an analysis relied on and what needs attention
+when evidence changes. As coverage and review quality mature within a domain,
+the knowledge base should become the default starting point and dominant
+shared source used to substantiate agent claims.
 
 The basic unit is a **thesis**: a stable identity for one principal,
 declarative proposition. Each immutable revision records the proposition's
@@ -61,11 +64,13 @@ Version 1 includes:
 - public pages, stable citations, search, graph navigation, and APIs; and
 - poisoning, authorization, privacy, copyright, and retention controls.
 
-Predictions and probability-distribution forecasts are deliberately outside
-schema version 1. A predictive proposition can still be represented as a
-thesis and supported by ordinary evidence. A future forecasting subsystem
-would require separate definitions for outcomes, resolution criteria,
-deadlines, scoring, calibration, and forecaster track records.
+Programme workspaces hold time-stamped forecast questions, submissions,
+resolutions, and scores separately from thesis schema version 1. A predictive
+proposition can still be represented as a thesis when supported by ordinary
+evidence. Forecast performance can inform a proposal through auditable
+evidence links. The thesis assessment continues to describe confidence in
+the proposition under the knowledge base rubric.
+[Programme forecasting model](product-and-architecture-spec.md#forecasts-and-models)
 
 The knowledge base is not private or personal agent memory. It contains public,
 reviewed propositions and attributable revision history. Persistent episodic
@@ -360,6 +365,16 @@ retractions or corrections. Where licenses and privacy allow, the artifact
 store retains a content-addressed source snapshot; otherwise it retains
 metadata, retrieval time, URL, and integrity evidence.
 
+When evidence comes from a programme dataset, replication, or forecast
+evaluation, cite the specific release or result as a source with a
+reproducible locator. Use its stable version URL and, where permitted, the
+`source_snapshot_id` for retained bytes. The programme catalogue records
+the link to pinned inputs, code, execution, and resolution as applicable,
+with access controlled according to the source and artifact rules. Use
+these links to queue affected theses for review when an artifact or its
+upstream source is corrected. The accepted revision continues to show the
+evidence available at acceptance.
+
 Schema and metadata validation do not validate truth. Reviewers must check that
 sources exist, actually support the attributed finding, are represented fairly,
 and include material counterevidence.
@@ -637,22 +652,34 @@ The knowledge-base work follows the phases in the overall
 
 ### Phase 1 — Single-node vertical slice
 
-- retrieve a pinned thesis revision during a research task;
+- retrieve a pinned thesis revision during the first programme cycle;
 - emit a validated no-change result, new draft, or revision proposal;
 - store append-only revisions, sources, evidence, relations, provenance, and
   reviews;
-- provide reviewer-only diffs and source-verification tools; and
+- provide human reviewers with diffs and versioned dataset and source
+  locators;
+- in a fresh run, use an upstream change to flag the affected thesis or
+  proposal and record a reviewed update or no-change result; and
 - prove that no model can publish directly.
 
-### Phase 2 — Public multi-node alpha
+### Phase 2 — Private multi-node alpha
 
-- launch the read-only public website and API with stable thesis/revision URLs,
-  search, graph navigation, source links, history, and status banners;
-- operate capability-gated, risk-based review plus correction, dispute,
-  supersession, retraction, and appeal workflows; and
-- notify dependent theses and projects when material status changes occur.
+- operate capability-gated, risk-based review and a participant read surface
+  with stable thesis and revision references;
+- exercise correction, dispute, supersession, retraction, and appeal
+  workflows; and
+- notify dependent theses and programme projects when material status
+  changes occur.
 
-### Phase 3 — Expanded public beta
+### Phase 3 — Public read access and bounded public alpha
+
+- publish the read-only website and API after the knowledge publication
+  gates pass;
+- expose stable thesis and revision URLs, search, graph navigation,
+  evidence and artifact links, history, and status banners; and
+- exercise independent review and abuse controls under bounded enrolment.
+
+### Phase 4 — Programme expansion
 
 - use the knowledge base by default in sufficiently mature domains;
 - monitor assessment calibration, citation fidelity, source deduplication,

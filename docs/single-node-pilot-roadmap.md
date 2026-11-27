@@ -1,480 +1,244 @@
-# Single-node pilot roadmap
+# Single-node research pilot roadmap
 
-**Document status:** Active living work tracker  
-**Delivery model:** Direct, ordered commits to `main`  
-**Last updated:** 2026-11-26  
-**Current focus:** C04 — download quarantine, scanning, and promotion  
-**Pilot gate:** One dedicated, low-value project account after C01–C08 pass
+- **Current focus** · C04 download quarantine and release
+- **Delivery model** · Dependency-ordered commits to `main`
+- **Updated** · 2026-11-27
 
-This roadmap turns the implemented
-[single-node prototype](prototype.md) into a local pilot suitable for one
-dedicated, low-value project account. Progress is governed by dependency and
-evidence gates. No real account is introduced until browser isolation,
-artifact handling, session control, and action recovery have passed their
-gates.
+The pilot passes when a human reviewer can reproduce a result from one living
+research programme and inspect how a fresh run handled a changed source. The
+programme produces a versioned dataset, a runnable analysis, a thesis proposal
+or reasoned no-change decision, and a forecast that can be resolved and scored.
+The pilot uses public, account-free research inputs and local fixtures. A
+controlled live-source run follows fixture acceptance on the intended Linux
+deployment. [Product roadmap](product-and-architecture-spec.md#14-delivery-roadmap)
 
-C02 implements the isolated browser runtime and its acceptance gate. The
-prototype's supervised worker and proxy remain available for development. The
-isolated browser keeps its disconnected IP namespace. C03 adds a private
-connection to a separate egress gate.
+## Pilot programme
 
-This boundary also protects node integrity. Web content and Chromium are
-high-exposure inputs; compromising them must not let an attacker replace the
-supervisor, weaken executable policy, forge core audit events, read node
-identity keys, or change the constitution version and digest bound to the node
-release. Isolation keeps the browser outside that trusted core.
+Use a bounded electricity-market question as the working example. In one
+Australian market region, measure the frequency of negative wholesale price
+intervals, describe the circumstances in which they occur, and forecast an
+observable outcome in a subsequent release. Freeze the region, interval and
+price definitions, observation window, handling of missing or duplicate
+intervals, data vintage, and publication rights in the charter. The descriptive
+analysis can motivate follow-up work on causes. A causal claim needs its own
+design and review.
 
-Isolation is containment, not proof that the host is running an official
-build. Signed reproducible releases, release manifests, node identity, and
-later platform attestation provide progressively stronger evidence about the
-code actually running. Trust tiers and server-side authorization must remain
-safe when that evidence is weak or unavailable.
+Use two documented versions of a small approved public dataset or deterministic
+fixtures modelled on them. Include a source change that exposes a plausible
+follow-up question and a release that can resolve a binary forecast. The first
+run receives only the information available at its cutoff. A live forecast
+remains pending until its named outcome is available.
 
-## Working rules
+### Cycle 1 — Establish a baseline
 
-- Update commit and milestone status here as work starts, lands, blocks, or
-  changes scope. This document is the operational source of truth for the
-  single-node pilot.
-- Keep each milestone runnable through one local command and local fixtures.
-- Extend the existing contracts instead of exposing a parallel privileged API.
-- Add failure behavior and adversarial tests before convenience retries.
-- Preserve 100% deterministic statement and branch coverage.
-- Keep real accounts, internet destinations, and persistent credentials out of
-  tests.
-- Stop at a milestone gate when the boundary is weaker than its documentation.
+1. Seed a programme and a small set of eligible project charters. Let a run
+   choose a project within the human's admission, opt-in, and budget rules.
+2. Retrieve a pinned thesis revision, collect evidence via the isolated
+   browser, and acquire an approved dataset via quarantine. Record source
+   locator, version or retrieval time, digest, rights, and the acquisition
+   decision.
+3. Produce a dataset release and a reproducible analysis. Save a manifest
+   for source and input versions, transformation and analysis code,
+   environment, parameters, output digests, and diagnostics.
+4. Submit a thesis draft, revision proposal, or reasoned no-change decision.
+   Give a human reviewer evidence locators and a diff against existing
+   knowledge. Record the review decision, objections, and any corrections.
+5. Freeze a binary forecast question, deadline, data cutoff, resolution
+   source and rule, and Brier scoring method. Record a forecast and a simple
+   baseline with the same cutoff before revealing the fixture outcome.
+
+### Cycle 2 — Update from fresh context
+
+1. Start a fresh run from programme records. Present a new source revision,
+   correction, or release and use pinned dependencies to identify the affected
+   dataset, analysis, forecast, and thesis proposal or revision.
+2. Rerun the affected work with the updated input. Record what changed,
+   whether prior findings still hold, and why any output was left alone.
+   Retain the previous versions and their inputs.
+3. Resolve and score the fixture forecast and baseline against the specified
+   outcome. Record the forecast error and any proposed change to the model or
+   next question. Keep predictive performance distinct from evidence of cause.
+4. Make the update reviewable. A second run can trace evidence or look for
+   counterexamples before seeing the author's conclusions. The human reviewer
+   records whether to accept the update, request changes, or leave the prior
+   assessment current.
+5. Have the agent propose a follow-up project if it identifies a material
+   gap. The proposal belongs in the programme queue for human admission.
 
 ## Work tracker
 
-Status values are `queued`, `in_progress`, `blocked`, and `done`. A unit is
-`done` only when its commit is on `main`, its gate passes, and this document
-reflects the resulting behavior and any residual limitation.
-
-| Unit | Commit | Status | Depends on | Result |
-|---|---|---|---|---|
-| SNP-01 | C01 | done | Prototype baseline | Verified trusted-core manifest, pinned non-root browser image, isolation contracts, and fixture topology |
-| SNP-02 | C02 | done | C01 | Offline Chromium isolation implemented and verified via Linux guest acceptance |
-| SNP-03 | C03 | done | C02 | Private per-session egress gate, verified with HTTP/HTTPS Chromium and zero-contact fixtures |
-| SNP-04 | C04 | queued | C01 | Downloads remain quarantined until deterministic scanning and promotion |
-| SNP-05 | C05 | queued | C02 | Encrypted, registered, expiring, and revocable project browser profiles |
-| SNP-06 | C06 | queued | C05 | Authenticated same-session takeover and active-session UI |
-| SNP-07 | C07 | queued | C01 | Durable R2 attempt ledger, idempotency, fencing, and reconciliation |
-| SNP-08 | C08 | queued | C03, C04, C06, C07 | One integrated hardened local workflow and operator runbook |
-| SNP-09 | C09 | queued | C08 | Dedicated low-value account pilot, adversarial suite, and go/no-go report |
-
-## Commit plan
-
-These commits are intentionally large integration units. Each one may contain
-contracts, implementation, fixtures, migrations, tests, documentation, and
-operator tooling. The goal is not minimal diffs; it is a sequence of coherent,
-reversible states where `main` remains runnable and accurately documented.
-
-### C01 — `feat(security): define the trusted core and isolated browser foundation`
-
-- define the constitution-bound trusted core and release-manifest schema;
-- bind supervisor, executable policy, constitution digest, dependency lock,
-  audit writer, node-key interface, and browser image digest;
-- select and document the primary isolation backend and unsupported platforms;
-- add browser image build, pinned dependencies, fixture topology, and
-  isolation/runtime contracts;
-- add conformance tests proving browser-facing interfaces contain no host path,
-  node key, raw debug endpoint, or core audit authority.
-
-This commit is the common contract point for the three parallel implementation
-lanes that follow.
-
-### C02 — `feat(browser): move Chromium into the enforced security boundary`
-
-- run the browser worker and Chromium as non-root with a read-only base,
-  isolated writable paths, resource limits, and no host container socket;
-- keep CDP, browser profile, and worker internals private to the boundary;
-- replace the current inherited-process assumptions with an authenticated,
-  bounded control transport;
-- make parent, worker, runtime, and control-channel loss terminal and
-  restart-safe;
-- retain the typed `BrowserSession` API and run the approved-page and denied-redirect
-  scenario in isolated Chromium.
-
-C02 runs only the bundled fixture in a disconnected network namespace. Its
-control connection uses a root-owned Linux Unix socket and a dedicated
-container connection with no published ports. C03 adds the external network
-path. Artifact export, model-assisted browser calls, persistent profiles, and
-takeover stay disabled until their prerequisites are available.
-
-The C02 installation and acceptance procedure
-passed in a disposable Linux rehearsal under Docker Desktop as both the node
-user and the root test operator. `task check` passed at 100% statement and
-branch coverage. A Linux guest running the intended systemd, Podman, crun, and
-Chromium stack is sufficient for C02 acceptance.
-
-### C03 — `feat(egress): enforce authenticated proxy-only HTTP and HTTPS`
-
-- make the egress gate the browser boundary's only network route;
-- authenticate the runtime to the gate without putting credentials in prompts,
-  events, artifacts, or command lines;
-- resolve DNS at the gate and validate the socket address before connecting;
-- allow GET and HEAD for approved cleartext HTTP authorities, and scope blind
-  HTTPS `CONNECT` to approved authorities;
-- deny direct sockets and alternate DNS, including bypass attempts from QUIC,
-  WebRTC, and extensions;
-- prove denied targets receive zero requests under normal, redirect, renderer,
-  and worker-compromise fixtures.
-
-Keep the browser IP namespace disconnected. The broker gives each browser
-container access to a private Unix socket served by a separate gate container.
-The operator supplies the maximum origin policy and the node requests a subset
-per session. HTTPS `CONNECT` enforces the proxy request method and destination
-socket. The encrypted HTTP methods, TLS virtual host, and application behavior
-inside the tunnel are outside the gate's visibility. Approve dedicated
-endpoints that do not relay traffic or share authority with denied services.
-
-The [C03 acceptance gate](trusted-core-and-isolation.md#c03-acceptance) passed
-as an ordinary node user and root operator in a disposable Linux guest running
-systemd 259, Podman 5.7, crun 1.21, and the pinned Chromium image. The denied
-fixture recorded zero TCP or UDP contacts. The operator run verified that
-parent, worker, runtime, broker, and gate failures each ended the session and
-removed both containers. `task check` passed at 100% statement and branch
-coverage. Run the integrated gate on the intended pilot deployment before
-introducing a real account.
-
-### C04 — `feat(artifacts): quarantine, scan, and promote browser downloads`
-
-- implement the artifact state machine and per-session quarantine;
-- stream size and digest checks before a file is complete;
-- add filename, type, archive, executable, malware, secret, and sensitive-data
-  checks;
-- promote clean content by digest only after every scanner allows it;
-- make scanner failure, cancellation, crash, rejection, expiry, and cleanup
-  fail closed and auditable.
-
-This commit can be implemented alongside C02 and C03 after C01 fixes the
-artifact and filesystem boundaries.
-
-### C05 — `feat(sessions): add encrypted project profiles and session registry`
-
-- add the local active/recent session registry and lifecycle records;
-- encrypt project profiles with OS-keystore-wrapped per-project keys;
-- expose decrypted state only inside the isolated browser boundary;
-- enforce profile locking, origin binding, idle/absolute expiry, revocation,
-  rotation, crash cleanup, and non-restoration of expired authority;
-- add operator-visible metadata without exposing cookies or credentials.
-
-This can proceed in parallel with C03, C04, and C07 once C02 establishes the
-runtime and storage boundary.
-
-### C06 — `feat(takeover): add authenticated same-session operator control`
-
-- add a short-lived, single-use handoff capability and authenticated loopback
-  UI;
-- provide same-session view/input, visible capture-paused state, explicit
-  return/decline, expiry, and revoke;
-- isolate operator frames, input, credentials, and verification codes from
-  model context and ordinary telemetry;
-- survive UI refresh and fail closed on UI, worker, or authorization loss.
-
-### C07 — `feat(actions): add durable consequential-action reconciliation`
-
-- persist intent, policy, approval, dispatch, acknowledgement, observed effect,
-  and reconciliation separately;
-- bind idempotency key and fencing token to task, action, capability, account,
-  resource, payload, approval, and expiry;
-- implement terminal and ambiguous states including `unknown_outcome`;
-- prevent blind replay after crash, timeout, cancellation, partition, or stale
-  worker activity;
-- add a provider-fixture contract for idempotent execution and read-after-write
-  reconciliation.
-
-This lane depends only on C01 and can proceed alongside the browser, artifact,
-and session work.
-
-### C08 — `feat(pilot): integrate the hardened single-node workflow`
-
-- connect isolated browsing, gated egress, quarantine, encrypted sessions,
-  takeover, policy, approval, action recovery, evidence, and reporting;
-- add one-command operator setup, diagnostics, run, pause, revoke, resume, and
-  cleanup;
-- add research, software, and long-form writing fixtures through the same
-  boundaries;
-- run crash/restart, secret-canary, prompt-injection, malformed-input, and
-  incident-revocation scenarios as one acceptance suite;
-- produce the operator runbook and residual-risk register.
-
-### C09 — `test(pilot): complete the dedicated low-value account gate`
-
-- add the project-account record and manually approved service configuration;
-- run the read-only and reversible-draft pilot sequence;
-- prove expiry, revoke, restart, artifact, audit, and no-secret guarantees
-  against the selected service;
-- inspect all prompts, events, artifacts, profiles at rest, quarantine records,
-  logs, and crash output;
-- record the go/no-go decision before any second account or external-write
-  capability.
-
-## Parallel execution
-
-Work can advance concurrently, but commits land on `main` in dependency-safe
-order. Parallel work should avoid changing a shared contract after a dependent
-lane has started; when that is unavoidable, update C01's contract first and
-realign the affected unit before integration.
-
-```text
-prototype baseline
-       |
-      C01  trusted core and contracts
-     / | \
-    /  |  \
- C02  C04  C07
-  |    |    |       browser       artifacts      action reliability
-  +-> C03   |       egress
-  |
-  +-> C05 -> C06   sessions and takeover
-    \    |    /
-     \   |   /
-       C08          integrated hardened workflow
-        |
-       C09          low-value account pilot and closeout
-```
-
-| Lane | Units | May run alongside | Convergence requirement |
-|---|---|---|---|
-| Trusted core and containment | C01 → C02 → C03 | C04 and C07 after C01 | C03 gate passes before C08 |
-| Artifact ingress | C04 | C02, C03, C07 | Released artifacts use C01 filesystem contract |
-| Sessions and operator control | C05 → C06 | C03, C04, C07 | Requires C02 runtime boundary; C06 passes before C08 |
-| Consequential action reliability | C07 | C02–C06 | Uses C01 identity/audit contracts; passes before C08 |
-| Assurance and documentation | Every commit | All lanes | Tests and docs land in the same commit as behavior |
-
-## Direct-to-main commit discipline
-
-- Land a commit only when every dependency in the tracker is already on `main`.
-  Parallel lanes may prepare work concurrently and land at their earliest safe
-  point; numerical IDs identify the planned units rather than requiring a
-  strictly serial landing order.
-- Every commit includes its relevant tests, fixtures, documentation, migration
-  behavior, and cleanup path. Do not leave a knowingly permissive temporary
-  state for a later commit.
-- Incomplete capabilities remain absent or deny by default. A commit may land a
-  disabled capability only when the disabled state is explicit, tested, and
-  accurately documented.
-- Run focused tests while developing, then `task check` before every commit.
-  Commits touching Chromium, isolation, or egress also run the applicable
-  real-browser and adversarial acceptance tasks.
-- Treat each commit as a rollback unit. Avoid combining unrelated formatting,
-  dependency churn, or speculative refactors with the named outcome.
-- Update the tracker status and current focus in the same commit. If scope or
-  order changes, update this plan before implementing against the new
-  assumption.
-- Never weaken a landed gate merely to keep delivery moving. Record the unit as
-  `blocked`, keep the previous safe behavior, and redirect effort to the
-  blocking boundary.
-
-## Milestone A — OS-enforced browser and network isolation (C01–C03)
-
-### Outcome
-
-Run the browser worker and Chromium in a rootless container, lightweight VM, or
-separate OS security context whose network can reach only the egress gate. The
-model-facing process must not be able to reach Chrome's debugging endpoint,
-profile, or network namespace. Conversely, the browser boundary must not be
-able to modify or impersonate the constitution-bound node core: supervisor,
-policy evaluator, audit writer, release metadata, or node identity keys.
-
-### Deliverables
-
-- reproducible browser-worker image with read-only base, non-root user, dropped
-  capabilities, process/memory/time limits, and no host container socket;
-- explicit trusted-core manifest covering the supervisor, executable policy,
-  constitution version/digest, audit component, node-key interface, browser
-  image digest, and dependency lock;
-- read-only code and policy mounts, isolated writable paths, and no browser
-  access to node keys or core audit storage;
-- private authenticated control channel between the node and worker;
-- debugging endpoint reachable only inside the browser security boundary;
-- proxy-only network path enforced outside Chromium;
-- controlled DNS resolution at the egress gate;
-- HTTPS `CONNECT` allow-listing by normalized destination authority without
-  intercepting application content;
-- explicit denial of QUIC, WebRTC bypass, extension bypass, and unsupported
-  schemes;
-- equivalent local-fixture behavior on the primary development platform, with
-  other platforms marked unsupported rather than silently weakened.
-
-### Gate
-
-Run the integrated gate on the intended pilot deployment before using a real
-account. A Linux VM is suitable when its host and management plane are under
-trusted administration. Verify that the ordinary node and model-facing
-processes lack engine, host management, and browser runtime access beyond their
-assigned capabilities.
-
-- approved HTTP and HTTPS fixtures work through the gate;
-- denied redirect, direct socket, alternate DNS, QUIC, and proxy-bypass tests
-  produce zero contact at denied servers;
-- a same-user process cannot use the control channel, debugging endpoint, or
-  proxy merely by discovering an address or port;
-- a compromised fixture page, renderer, or browser worker cannot alter node
-  code or policy, change the bound constitution digest, read node identity
-  keys, or append a forged event to the core audit journal;
-- the release manifest and browser image digest are recorded with the run,
-  without claiming that self-reported values prove an untrusted host is honest;
-- parent, worker, gate, and container failure all revoke the session without
-  action replay;
-- the human-takeover path either works through the isolated session or remains
-  explicitly disabled until C06 passes.
-
-## Milestone B — Artifact quarantine and release (C04)
-
-### Outcome
-
-Treat every browser download as untrusted ingress. A downloaded file must not
-enter a task workspace or model context until a deterministic quarantine
-workflow releases it.
-
-### Deliverables
-
-- artifact states `receiving`, `quarantined`, `scanning`, `released`,
-  `rejected`, and `expired`;
-- per-session quarantine directory outside task workspaces;
-- streaming size limit and SHA-256 while receiving;
-- filename normalization, regular-file checks, media-type detection, archive
-  depth/count/expanded-size limits, and executable-content policy;
-- pluggable malware scanner with fail-closed unavailable/error behavior;
-- secret-canary and sensitive-data scan before release;
-- content-addressed promotion into the task workspace after all checks pass;
-- audit events for receipt, scan decisions, promotion, rejection, and cleanup,
-  without storing file contents in the journal.
-
-### Gate
-
-- clean fixture files are released with stable provenance;
-- malware fixture, archive bomb, oversized file, traversal name, symlink,
-  scanner failure, and secret canary are rejected;
-- cancellation and crashes cannot turn a partial or unscanned file into a
-  released artifact;
-- rejected and expired quarantine data is recoverably cleaned.
-
-## Milestone C — Session registry, encrypted profiles, and takeover UI (C05–C06)
-
-### Outcome
-
-Make authenticated browser sessions visible, expiring, revocable, and usable
-through a local authenticated operator surface without exposing credentials to
-the model or ordinary telemetry.
-
-### Deliverables
-
-- local registry of active and recently ended browser sessions with project,
-  allowed origins, creation, last use, idle/absolute expiry, state, and
-  revocation reason;
-- per-project profile encryption using an OS-keystore-wrapped key, with
-  decrypted state available only inside the isolated browser boundary while
-  active;
-- authenticated loopback takeover UI using a short-lived, single-use handoff
-  capability;
-- same-session view and input, explicit return/decline, visible capture-paused
-  state, and independent revoke control;
-- crash-safe profile lock, expiry, cleanup, revocation, and rotation behavior;
-- no password, verification code, cookie, storage value, keystroke, or takeover
-  frame in prompts or ordinary audit events.
-
-### Gate
-
-- an unauthenticated local process cannot list, view, control, or revoke
-  sessions;
-- takeover survives UI refresh and returns only the minimum redacted result;
-- expiry and revoke terminate control, egress, and profile use promptly;
-- restart never silently restores an expired or revoked capability;
-- secret-canary tests cover prompts, logs, screenshots, profiles exported at
-  rest, crash reports, and task artifacts.
-
-## Milestone D — Consequential action ledger and reconciliation (C07)
-
-### Outcome
-
-Give approved R2 actions durable identities and explicit recovery semantics so
-a crash cannot cause blind replay or falsely report success.
-
-### Deliverables
-
-- durable action records separating intent, policy, approval, dispatch,
-  provider acknowledgement, reconciliation, and observed effect;
-- idempotency key and attempt/fencing token bound to task, action, capability,
-  resource, approval, and expiry;
-- states for `prepared`, `dispatched`, `confirmed`, `denied`, `failed`,
-  `unknown_outcome`, and `reconciled`;
-- provider adapter contract for idempotent execution or read-after-write
-  reconciliation;
-- restart behavior that never retries `dispatched` or `unknown_outcome`
-  actions without provider evidence or renewed human direction;
-- audit rendering that preserves accountability without persisting secrets or
-  sensitive request bodies.
-
-### Gate
-
-- crash-before-dispatch, crash-after-dispatch, lost response, duplicate reply,
-  timeout, cancellation, expired approval, and zombie-worker tests pass;
-- a confirmed effect is not duplicated across restart;
-- an ambiguous effect stops in `unknown_outcome` and is visible to the operator;
-- approval cannot be reused for a changed payload, resource, account, or
-  attempt.
-
-## Milestone E — Integration and dedicated low-value account pilot (C08–C09)
-
-### Outcome
-
-Exercise the complete local boundary with one service account created and
-owned by the project, not an ordinary personal account.
-
-### Preparation
-
-- choose a service whose terms permit the intended human-supervised automation;
-- record owner, purpose, allowed origins/tasks, recovery human, recovery
-  channel, authentication mode, expiry, and revocation procedure;
-- create the account manually, enable the least privilege available, and avoid
-  personal mail, contacts, payment methods, private history, and reused
-  credentials;
-- define an immediate manual kill switch and account deletion procedure.
-
-### Pilot sequence
-
-1. Human signs in through takeover and explicitly permits profile persistence.
-2. Agent performs an R0 read-only task and produces cited evidence.
-3. Agent prepares one reversible R1 draft without external publication.
-4. Operator revokes the session and confirms further access fails.
-5. Supervisor restarts and proves revoked authority is not restored.
-6. Review all prompts, events, artifacts, quarantine records, and crash output
-   for canaries or account data outside the intended boundary.
-
-### Gate
-
-- no reusable credential, cookie, token, recovery value, or private takeover
-  content appears outside the encrypted isolated profile;
-- destination, capability, approval, artifact, expiry, and revocation controls
-  behave as specified against the real service;
-- no public post, message, account change, upload, payment, or recovery action
-  occurs;
-- the pilot has an operator-reviewed report, residual-risk list, and go/no-go
-  decision before any second account or external-write capability is added.
-
-## Closeout and next decision
-
-After C08 and C09 pass, run the complete deterministic, real-browser,
-container-escape/egress, secret-canary, prompt-injection, crash/restart, and
-incident-revocation suites. Obtain a focused independent review of the local
-browser, profile, artifact, and action boundaries.
-
-If the gates pass, the next work is the capacity-limited multi-node alpha:
-identity, enrollment, project/task assignment, leases and fencing, encrypted
-artifact storage, dashboard, capability broker, and a small private participant
-cohort. If a gate does not pass, keep the system local and fixture-only while
-that boundary is corrected.
-
-## Explicitly outside this roadmap
-
-- public self-service enrollment;
-- ordinary personal or high-value accounts;
-- autonomous public posting or messaging;
-- money movement;
-- confidential or regulated projects;
-- multiple external integrations;
-- private cross-project memory;
-- claims of general browser or internet support beyond the tested destination
-  and protocol set.
+A unit is `done` when its commit is on `main`, its gate passes, and the
+tracker records the resulting behaviour and residual limits.
+
+| Unit | Status | Depends on | Result |
+| --- | --- | --- | --- |
+| C01 | done | Prototype baseline | Constitution-bound trusted-core manifest, pinned non-root browser image, isolation contracts, and fixture topology |
+| C02 | done | C01 | Offline Chromium in the Linux isolation boundary with terminal session failure |
+| C03 | done | C02 | Private per-session egress gate with HTTP/HTTPS Chromium and zero-contact fixtures |
+| C04 | queued | C03 | Quarantined, scanned, content-addressed research downloads |
+| C05 | queued | C03, C04 | Bounded model-assisted evidence collection through the isolated browser |
+| C06 | queued | C01, C04 | Local research records, reproducible analysis, thesis review, and forecast resolution |
+| C07 | queued | C05, C06 | Integrated two-cycle research pilot and operator acceptance |
+
+C04 is the next landing target. Public-page observations for C05 and analysis
+with preloaded fixtures for C06 can be developed in parallel with quarantine.
+
+## C01–C03 — Trusted core, isolation, and egress
+
+The Linux acceptance runs verified the trusted-core and browser image
+contracts, offline Chromium, and the separate egress gate. C02 and C03 passed
+in a disposable Linux guest with the intended systemd, Podman, crun, and
+Chromium stack. C03 passed as both ordinary node user and root operator.
+The denied fixture recorded zero TCP or UDP contacts, and loss of the parent,
+worker, runtime, broker, or gate ended the session and retired both containers.
+`task check` passed at 100% statement and branch coverage.
+[Linux setup and acceptance](trusted-core-and-isolation.md#c03-acceptance)
+
+Repeat the applicable acceptance on the intended pilot deployment before
+connecting to live research sources. Verify that browser-facing processes
+lack host engine and management access, node keys, and audit authority, and
+that the browser has only its private control and proxy paths. The browser
+runs in a disconnected IP namespace. The operator sets the maximum origin
+policy, and the node requests a subset for each session. The manifest binds
+expected code, policy, browser image, and Constitution digest. Release signing
+and runtime assurance have separate checks for independently operated nodes.
+
+The egress gate permits cleartext GET and HEAD at approved authorities and
+scopes blind HTTPS `CONNECT` to approved destinations. HTTPS virtual hosts,
+methods, and payloads inside the tunnel are outside its visibility. Approve
+only pilot destinations whose service behaviour is suitable for the allowed
+work. Document required redirects and dependencies and avoid destinations
+that relay traffic or share authority with denied services. If a source
+requires stronger method enforcement, use a separately mediated retrieval path
+or leave it out of the pilot.
+[HTTPS boundary](trusted-core-and-isolation.md#private-egress-gate)
+
+## C04 — Quarantine, scan, and release downloads
+
+- Receive into per-session quarantine outside task workspaces. Enforce a
+  streaming byte limit and SHA-256 digest. Track `receiving`, `quarantined`,
+  `scanning`, `released`, `rejected`, and `expired` states.
+- Validate normalised names, regular-file status, actual type, archive depth,
+  count and expanded size, and executable-content policy. Scan for malware,
+  secret canaries, and sensitive data, with a deny by default for scanner
+  failure or an unavailable required scanner.
+- Promote only clean, complete content by digest. Bind the result to the
+  project, task, session, source, and scan decisions. Audit receipt, decision,
+  release, and cleanup without copying file contents into the journal.
+- Demonstrate clean-file release and rejection for oversize, traversal,
+  symlink, malware, archive bomb, secret canary, and scanner failure. Show
+  that cancellation, crash, and repeated cleanup never publish partial or
+  unscanned bytes. Keep rejected and expired files inaccessible and clean
+  them up on restart where needed.
+
+The gate includes the file types selected for the pilot research question.
+Exercise document parsing inside a bounded process where the programme
+requires it. Treat scanner-approved files as untrusted analysis inputs.
+
+## C05 — Isolated browser research
+
+- Connect the supervisor's typed, policy-checked browser operations to the
+  isolated worker. Support the navigation, structured observation and
+  page-local controls needed to find and verify the pilot sources. Bound
+  output sizes, tabs, time, tool use, and origin changes.
+- Attach origin, locator, retrieval time and source references to evidence
+  observations. Keep page text, screenshots, and extracted content labelled
+  as untrusted. Model-visible data contains no authority to widen policy or
+  invoke raw browser control.
+- Keep sessions disposable. Deny public submission, uploads, authentication,
+  raw CDP, arbitrary script execution, and access to browser storage and host
+  paths. Require C04 for artifact export through quarantine.
+- Exercise approved tasks in Chromium and verify that forbidden operations,
+  redirects, prompt injection, expiry, cancellation, and channel failure
+  remain contained. Prove that old handles and browser state cannot survive
+  session loss. Confirm denied destinations receive zero contact.
+
+Start with operator-approved origins and a small source inventory. Expand
+operations and approved origins against observed research needs and acceptance
+evidence.
+
+## C06 — Research records, analysis, and review
+
+- Create a minimal local programme and project record, with human admission,
+  owner opt-in, a bounded project choice, and a queue for follow-up proposals.
+  Store immutable versions for source artifacts, dataset releases, run
+  manifests, and forecast submissions with explicit dependency references.
+- Run transforms and analysis in a disposable, network-disabled environment
+  with pinned tooling, read-only inputs, explicit outputs, and process,
+  memory, storage, and time limits. Start with reviewed fixture analysis
+  code. Gate execution of external research code on containment for untrusted
+  programs. Verify the runner has no host credentials, browser authority,
+  node keys, or core audit access.
+- Emit versioned artifacts with schema, source lineage, method, digest,
+  licensing and quality checks. Confirm that reruns can reproduce expected
+  values and that malformed input, injected content, excessive output and
+  execution failure do not yield accepted artifacts.
+- Retrieve a pinned thesis revision and submit a validated draft, revision
+  proposal, or reasoned no-change result under the v1 contracts. Provide
+  human review, a diff, and evidence locators. Record review and catalogue
+  changes durably and prevent model-only publication.
+- Store a forecast question, pre-outcome submission and baseline, resolution
+  evidence, and score. Test temporal separation, duplicate resolution,
+  unresolved outcomes, and upstream corrections. Preserve the original
+  submission and rule. Test that a fresh run can identify dependants from a
+  changed input and that stale or duplicate commits cannot corrupt accepted
+  state.
+
+The local implementation can use a small catalogue, immutable files, and a
+journal. Use task-scoped state and the existing supervisor and audit contracts.
+[Thesis vertical slice](knowledge-base-spec.md#phase-1--single-node-vertical-slice)
+
+## C07 — Integrated pilot and acceptance
+
+Provide one local command and an operator runbook for the two-cycle fixture.
+Document setup, source configuration, run, pause, revoke, retry, diagnostics,
+and cleanup. Integrate policy, evidence capture, quarantine, analysis, review,
+and forecast scoring through the same boundaries used by the component gates.
+
+The fixture passes when all of the following hold.
+
+- A reviewer can trace a material claim and a sampled dataset record to the
+  exact source version and rerun the initial analysis against pinned inputs.
+- An agent chooses an eligible project within the owner's restrictions and
+  submits a follow-up charter for human admission. Selection and proposal
+  submission preserve the approved project scope and budget.
+- A fresh run finds the relevant records, reruns affected work, and explains
+  what changed. Earlier artifacts, revisions, and forecasts remain intact.
+- A human reviews the thesis proposal or no-change result. Model authority
+  remains confined to proposal submission. The forecast resolution and
+  baseline score are reproducible from the pre-outcome records.
+- Crash and restart at artifact release, analysis, proposal submission or
+  forecast resolution leave a consistent state. Repeated steps do not
+  duplicate releases, reviews or scores. Cancellation and revocation reject
+  stale results and remove active authority.
+- Prompt injection, malformed downloads, secret canaries, resource limits,
+  and loss of privileged components behave as specified. Logs and review
+  artifacts contain the required provenance and exclude reusable secrets.
+- The intended deployment passes the integrated browser and egress gates.
+  The operator documents the anonymous source policy, residual HTTPS risk,
+  and an independent review of the exercised boundaries before allowing
+  separately configured live retrieval.
+
+Use a reviewed public source with permission for the intended access and
+appropriate rights for retained and published artifacts. Run the workflow
+against that source on the intended deployment. Record reproducibility,
+observed source and tool limitations, and time spent by the reviewer. Record
+a go/no-go decision for a private multi-node trial. Keep public enrolment and
+publication subject to their separate gates.
+[Multi-node delivery plan](product-and-architecture-spec.md#14-delivery-roadmap)
+
+## Working rules
+
+- Land dependency-safe, reversible commits on `main`. Update tracker and
+  acceptance evidence with the implementation. Incomplete capabilities stay
+  disabled or deny by default.
+- Keep milestone verification runnable locally with fixtures and no real
+  accounts, persistent credentials, or Internet destinations in tests.
+  Live-source runs use separately reviewed configuration.
+- Reuse typed contracts and the trusted audit path. Record failure behaviour
+  and adversarial fixture results alongside successful runs.
+- Run `task check` before landing. Preserve 100% deterministic statement and
+  branch coverage. Run applicable Chromium, isolation and egress acceptance
+  for boundary changes.
+- Keep a failed boundary gated. Record the blocker, preserve the previous
+  safe behaviour, and continue work that can be verified independently.

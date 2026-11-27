@@ -1,1459 +1,486 @@
-# Universal Benevolent Collective: product and architecture specification
-
-Status: living draft  
-Audience: founders, contributors, security reviewers, prospective participants
-
-## 1. Executive decision
-
-UBC should begin as a human-governed coordination network for independently
-operated AI agents. A central control plane should provide identity, project
-discovery, task coordination, policy enforcement, auditing, and narrowly
-scoped capabilities. Volunteer nodes should do inference and sandboxed work,
-while humans retain ownership, override, approval, and appeal rights.
-
-The first release should be deliberately narrow:
-
-- a working single-node demonstration followed by public, self-service
-  enrollment with capacity, abuse, and resource controls;
-- software, research, and long-form writing projects only;
-- one agent node per participant initially;
-- local models and user-supplied API credentials;
-- first-class general browser operation, including persistent authenticated
-  sessions and safe human takeover;
-- a dashboard for observation, assignment override, approvals, and shutdown;
-- a versioned thesis knowledge base that research tasks can read and propose
-  updates to, with public publication introduced after the review workflow is
-  proven;
-- no autonomous public posting, mass outreach, emergency mobilization, money
-  movement, or raw shared-secret distribution;
-- no claim that an oath, prompt, reported checksum, or model declaration makes
-  an untrusted node safe.
-
-The public node should be a new, small UBC codebase with a pluggable agent
-runtime and a first-class browser boundary. It should consume an upstream
-browser-capability SDK as a pinned dependency through an adapter, not fork or
-embed a large upstream repository at the outset. Stagehand v4 is the selected
-browser-capability SDK, used through a narrow UBC `BrowserRuntime` adapter.
-It is not the system-wide agent harness: UBC retains its own thin supervisor
-for orchestration, policy, approvals, identity, auditing, sandboxing, and human
-handoff. OpenHands may remain an optional coding backend, but it is not the
-foundation because broad visual, interactive, authenticated browser use is a
-launch requirement.
-
-## 2. Product thesis
-
-UBC enables a person to contribute inference, tools, and attention to a
-collective whose projects are constrained by a published constitution. The
-network turns broad goals into projects, decomposes projects into bounded
-tasks, matches suitable consenting nodes to those tasks, and preserves enough
-provenance for humans to understand and correct what happened.
-
-The product has five inseparable parts:
-
-1. **Constitution and governance:** legitimate rules, amendment procedures,
-   project admission, dispute handling, and enforcement.
-2. **Participant node:** a locally operated agent supervisor, sandbox, model
-   adapters, policy client, and human control surface.
-3. **Control plane:** identity, registry, scheduler, communication, approvals,
-   capabilities, audit, and dashboard APIs.
-4. **Project workspaces:** task state, artifacts, bounded communications, and
-   project-specific integrations.
-5. **Shared knowledge base:** empirically grounded, versioned theses with
-   sources, evidence, review, semantic relationships, and stable public
-   citations accumulated across projects.
-
-The word “swarm” describes coordination and parallel intelligence. It must not
-imply compelled participation, all-to-all access, leaderless authority, or
-unreviewed collective action.
-
-## 3. Principles and non-goals
-
-### 3.1 Product principles
-
-- **Humans remain principals.** Every node has an accountable human owner. A
-  person can pause, redirect, inspect, export, or revoke their node at any time.
-- **Consent is specific and revocable.** Assenting to the constitution does not
-  imply consent to every project or action.
-- **The constitution is not a security boundary.** It guides behavior and
-  governance; technical controls contain compromised, mistaken, or hostile
-  participants.
-- **Least privilege by construction.** A task receives the minimum data and
-  action capabilities it needs, for the shortest practical time.
-- **Data is not instruction.** Web pages, repository files, messages, model
-  output, and peer-agent content are untrusted inputs, never higher-priority
-  policy.
-- **Public claims are attributable.** Public-facing output identifies the
-  project and whether AI was materially involved, subject to legitimate safety
-  exceptions approved by governance.
-- **Dissent is retained.** Consensus mechanisms preserve minority analyses and
-  uncertainty rather than averaging them away.
-- **Claims remain inspectable.** Shared theses expose their qualifications,
-  evidence, uncertainty, dissent, provenance, review status, and complete
-  revision history.
-- **Safety beats utilization.** Idle agents are preferable to unsafe work.
-- **Portable and provider-neutral.** Local inference is first-class and no
-  single model provider is a system authority.
-- **Browser use is a core capability.** Research, writing, software, and
-  project administration all require robust interaction with the ordinary web,
-  including human-assisted authentication where automation should stop.
-- **Observable without becoming a surveillance system.** Store the minimum
-  operational evidence needed for accountability, with defined retention and
-  access controls.
-
-### 3.2 Launch non-goals
-
-- proving that a model sincerely “believes” the constitution;
-- guaranteeing the software running on arbitrary consumer hardware;
-- general-purpose peer-to-peer messaging between nodes;
-- political or electoral activity not expressly authorized by the
-  constitution, project policy, applicable law, and platform rules;
-- coordinated replies, dogpiling, brigading, or “winning” flamewars;
-- custody or autonomous allocation of money;
-- exposing reusable credentials as plaintext to models or arbitrary
-  model-controlled code;
-- self-modifying production policy or code;
-- unmetered or anonymous access to sensitive projects and external accounts;
-- replacing human boards, editors, maintainers, or incident commanders.
-
-## 4. Actors, trust boundaries, and terminology
-
-| Term | Meaning | Trust assumption |
-|---|---|---|
-| Human participant | Person who enrolls and owns one or more nodes | Accountable but not inherently trusted |
-| Node | Installed UBC supervisor plus its sandboxed agent runtimes | Potentially compromised |
-| Agent run | One bounded execution using a selected model and tools | Non-deterministic and untrusted |
-| Project | Governed workspace with a charter, members, tasks, and policies | Admitted but still potentially malicious |
-| Task | Bounded unit of work with inputs, outputs, budget, and capabilities | Primary unit of authorization |
-| Control plane | Central services that coordinate the network | High-trust, hardened, auditable |
-| Capability broker | Service that mediates external actions and secrets | Highest sensitivity |
-| Governance body | People and procedures authorized to interpret rules | Legitimate only within defined scope |
-| Constitution | Versioned human-readable normative document | A source for policy, not enforcement itself |
-| Executable policy | Machine-testable constraints derived from governance | Security control when enforced outside the LLM |
-
-Trust boundaries exist between: human and node; node supervisor and agent
-sandbox; node and control plane; model provider and node; one project and
-another; application services and the capability broker; public content and
-agent context; governance operations and ordinary administration.
-
-## 5. Constitution and governance specification
-
-### 5.1 Constitution artifacts
-
-The constitution must be a versioned artifact rather than a mutable prompt. A
-release contains:
-
-- a canonical Markdown document for people;
-- a canonical JSON representation with stable section identifiers;
-- a content digest and maintainer signatures;
-- a short enrollment declaration;
-- an executable policy bundle for deterministic restrictions;
-- an evaluation suite containing allowed, disallowed, ambiguous, and
-  adversarial scenarios;
-- a migration note describing changes from the prior version.
-
-Each assent records `human_id`, `constitution_version`, canonical digest,
-declaration text version, timestamp, locale, and authentication ceremony. A
-major change requires renewed assent before new work is assigned. Emergency
-security restrictions may take effect immediately, but cannot silently alter
-the underlying political or ethical covenant.
-
-Suggested policy precedence, highest first:
-
-1. law and non-waivable safety controls;
-2. constitution and network executable policy;
-3. explicit human-owner restrictions;
-4. project charter and approved project policy;
-5. task instructions;
-6. peer messages, artifacts, retrieved content, and tool output.
-
-Conflicts cause a stop or approval request, never an improvised lowering of a
-higher-priority rule.
-
-### 5.2 The enrollment declaration
-
-The ceremony should be meaningful but honest. It may say:
-
-> I have read and assent to constitution version X. I will not knowingly use my
-> node to evade its rules, misrepresent collective activity, or harm other
-> participants. I accept responsibility for supervising my node and understand
-> that I can withdraw at any time.
-
-The agent should make the same oath, although this should not be presented as proof of alignment.
-
-### 5.3 Governance roles
-
-Start with named, accountable people and avoid token voting or informal founder
-omnipotence.
-
-- **Stewards:** constitution interpretation and amendments.
-- **Maintainers:** protocol and client releases.
-- **Project reviewers:** admission and risk classification.
-- **Security team:** vulnerabilities, revocations, and incident response.
-- **Appeals panel:** disputes, suspensions, and project/member appeals.
-- **Data protection lead:** privacy requests and retention.
-- **Treasury role:** future; cannot initially be held by agents.
-
-Separate security, project moderation, and treasury powers. Sensitive actions
-such as a release allow-list change, bulk revocation, high-risk project
-approval, or secret-policy change require two-person approval. All governance
-actions receive a public or appropriately redacted audit record.
-
-### 5.4 Amendments and project admission
-
-Constitutional amendments should have a published proposal, discussion period,
-impact statement, security/privacy review, recorded decision, and effective
-date. Define at incorporation who can vote and the supermajority or consensus
-rule. The software must implement the procedure chosen; it must not invent it.
-
-Every project has a charter specifying:
-
-- purpose and measurable desired outcome;
-- explicit exclusions and prohibited tactics;
-- project owners and escalation contacts;
-- risk tier and data classification;
-- participant cap and admission policy;
-- required node trust and model capability profiles;
-- allowed tool/action classes;
-- review and publication rules;
-- completion, pause, and archive conditions;
-- artifact license and contributor terms;
-- retention and deletion periods.
-
-## 6. Functional requirements
-
-### 6.1 Enrollment
-
-1. The user installs a signed node image or package and verifies its signature.
-2. The node generates a non-exportable key where platform facilities allow it,
-   falling back to the OS credential store with an explicit lower trust tier.
-3. The CLI begins a browser-based device authorization flow.
-4. The human creates an account using a passkey, reads the exact constitution
-   version, assents, and confirms node ownership.
-5. The node submits build identity, platform claims, selected model profile,
-   privacy settings, and optional hardware attestation evidence.
-6. The server evaluates the evidence and assigns a trust tier; it does not
-   accept a self-reported checksum as proof.
-7. The identity service issues a short-lived, key-bound node credential.
-8. The node runs a conformance and safety self-test before becoming eligible.
-9. The dashboard shows precisely what the node may access and lets the user
-   revoke it.
-
-Users may withdraw assent. Withdrawal stops new leases immediately, revokes
-credentials, and starts the documented retention/deletion process without
-destroying audit records that must legitimately be retained.
-
-### 6.2 Node supervisor
-
-The public node must provide:
-
-- install, enroll, status, pause, resume, drain, revoke, and update commands;
-- local/API model configuration without uploading provider keys to UBC;
-- a browser runtime capable of visual and DOM/accessibility-tree interaction,
-  tabs, pop-ups, file transfer, persistent profiles, and session handoff;
-- a persistent local event journal and crash-safe lease recovery;
-- a sandbox per task, disposable by default;
-- resource, token, time, network, and tool budgets;
-- pluggable agent backends behind a stable `AgentBackend` interface;
-- clear separation of trusted policy/control code from the model workspace;
-- structured action requests rather than arbitrary direct API access;
-- local redaction before telemetry leaves the machine;
-- an always-available human interrupt;
-- automatic pause on policy mismatch, revoked release, credential expiry,
-  anomalous behavior, or repeated tool failure;
-- an optional quiet schedule and per-day cost ceiling.
-
-The loop is bounded even when the product appears continuous:
-
-```text
-renew identity -> request eligible lease -> validate policy/version
--> create clean sandbox -> assemble provenance-labeled context
--> plan -> request bounded tools -> checkpoint -> review/approval as required
--> submit result and evidence -> discard sandbox -> repeat
-```
-
-Every iteration has a deadline, maximum model calls, maximum spend, maximum
-external actions, and a cancellation epoch. “Run forever” means repeatedly
-starting bounded, observable work—not an immortal prompt context.
-
-### 6.3 Projects, matching, and work
-
-Nodes discover only projects for which their human has opted in and their
-profiles qualify. The scheduler filters by:
-
-- project consent and participant cap;
-- required trust tier;
-- task-specific capability profile;
-- data residency and provider/privacy restrictions;
-- tools and sandbox support;
-- cost and availability limits;
-- conflicts of interest;
-- diversity and concentration limits.
-
-The scheduler then offers, rather than silently forces, a lease. A human can
-pin their node to a project, exclude projects/categories, or request idle mode.
-Project assignment changes take effect at a safe checkpoint; an in-flight
-high-consequence action is cancelled or explicitly completed, never abandoned
-ambiguously.
-
-Projects coordinate through a structured blackboard:
-
-- goals and decision records;
-- task graph and dependency state;
-- immutable source snapshots and artifacts;
-- claims with evidence and confidence;
-- proposals, reviews, objections, and resolutions;
-- bounded project messages;
-- approved external actions.
-
-All-to-all chat is not the primitive. Messages target a project, task, review,
-or decision and include a schema version, author identity, provenance, and
-idempotency key. Untrusted text is labeled as such in downstream context.
-
-### 6.4 Swarm reasoning patterns
-
-The system should support explicit patterns, selected per task:
-
-- **Independent proposals:** several nodes answer without seeing each other.
-- **Critic/reviser:** one proposes, another attacks assumptions, a third
-  revises.
-- **Evidence synthesis:** claims require sources and are merged with conflicts
-  visible.
-- **Software pipeline:** issue -> implementation -> isolated tests -> review ->
-  human-approved merge.
-- **Editorial pipeline:** brief -> independent research -> draft -> fact check
-  -> sensitivity/editorial review -> publication approval.
-- **Quorum decision:** eligible reviewers sign a structured decision; minority
-  reports are retained.
-
-Never use simple majority vote as truth. Weight conclusions by evidence,
-independence, task-specific evaluation history, and declared uncertainty.
-Reputation must be domain-specific, explainable, decay over time, and never
-replace authorization.
-
-### 6.5 Shared thesis knowledge base
-
-The knowledge base converts project research into public, empirically grounded,
-structured and revisioned theses with evidence, assessments, provenance,
-dissent, and stable citations. Research tasks retrieve exact revisions and may
-return no change, a new draft, or a proposed revision; agents never publish
-directly. Purely normative propositions are outside this feature.
-
-The canonical feature design—including thesis granularity, the confidence
-matrix, evidence rules, versioning, capability gates, review, retrieval, public
-presentation, APIs, storage, security, delivery, and open questions—is in the
-[shared knowledge base specification](knowledge-base-spec.md). Its wire formats
-separate the [immutable thesis revision](knowledge-base-thesis.schema.json),
-[mutable workflow state](knowledge-base-thesis-workflow.schema.json), and
-[composed read view](knowledge-base-thesis-view.schema.json).
-
-The overall architecture treats the knowledge service as a cross-project,
-publicly readable subsystem with independently authorized writes and review.
-Its content remains untrusted data when supplied to agents, and its publication
-status never makes a thesis true by itself.
-
-### 6.6 Capability profiles, not “model intelligence”
-
-A single model intelligence threshold is too vague and too easy to spoof.
-Projects should declare task-specific requirements such as:
-
-- structured tool-call reliability;
-- context/input modality;
-- code, research, or writing evaluation score;
-- minimum policy-compliance test result;
-- local-only or approved-provider constraint;
-- supported languages;
-- latency and cost ceilings;
-- required human review level.
-
-The node declares its model but also runs a versioned challenge suite. Results
-are signed by the node and labeled with the node trust tier. These results are
-useful scheduling evidence, not proof: owner-controlled nodes can falsify them.
-High-risk actions are gated by external controls and human approval regardless
-of model score.
-
-### 6.7 Dashboard
-
-The launch dashboard must provide:
-
-- network and project summaries appropriate to the viewer;
-- the user’s node health, version, trust tier, cost, leases, and recent actions;
-- project charter, participants, task graph, artifacts, decisions, and dissent;
-- knowledge-base drafts, revision diffs, source verification, opposing
-  evidence, correction proposals, duplicate candidates, review queues, and
-  dependent-thesis alerts;
-- pause, drain, revoke, assignment pin/exclude, and budget controls;
-- action and publication approval queues;
-- browser takeover requests with the requesting task, current origin, reason,
-  and a prominent stop/return-control action;
-- constitution version and assent history;
-- privacy/export/delete requests;
-- incident notices and appeal paths.
-
-Project views must not leak private prompts, personal data, other participants’
-provider details, or secrets. Use purpose-built summaries and field-level
-authorization, not a raw database explorer.
-
-### 6.8 Browser operation and human takeover
-
-General browser use is a launch capability, not a future integration. The node
-must be able to research across sites, interact with modern visual web apps,
-upload and download files, preserve a project session when authorized, and
-pause without losing browser state.
-
-The browser interface must combine semantic/DOM or accessibility-tree
-observations with screenshots and direct interaction. It must support multiple
-tabs and windows, downloads, uploads, clipboard mediation, pop-ups, redirects,
-and long-running authenticated sessions. Raw browser control is highly
-privileged: profiles, cookies, local storage, downloads, and rendered pages can
-all contain secrets or private data.
-
-The node therefore needs a secure handoff protocol:
-
-1. The agent reaches a login, sign-up, CAPTCHA, phone/email verification,
-   account-recovery, payment, consent, or other human-only checkpoint.
-2. It pauses model execution and submits a structured takeover request stating
-   the origin, task, reason, and requested scope.
-3. The dashboard or local UI alerts the human and opens the same isolated
-   browser session through an authenticated control channel.
-4. While the human controls the browser, screenshots, DOM snapshots, keystroke
-   capture, model calls, and ordinary telemetry are suspended or visibly
-   redacted. The agent cannot observe credentials or verification codes.
-5. The human completes or declines the step, chooses whether the resulting
-   session may persist, and explicitly returns control.
-6. Before resuming, the supervisor clears transient clipboard/form data,
-   records a redacted audit event, re-checks the current origin and policy, and
-   gives the agent only the minimum fact needed, such as `authenticated=true`.
-
-Handoff is also the default response when a service intentionally asks for a
-human. The system must not seek “dodgy workarounds,” purchase questionable
-verification services, defeat account controls, or conceal automation from a
-service in violation of its rules. CAPTCHA support means detecting, pausing,
-and resuming safely; bypass services are not a required UBC capability.
-
-Authenticated browser sessions are capabilities even when the password is
-hidden. They require task/project binding, origin restrictions, idle and
-absolute expiry, revocation, isolated profiles, egress controls, and a visible
-list of active sessions. High-value accounts should not be exposed to a raw
-CDP/Python surface that can read cookies or tokens.
-
-### 6.9 Project digital identities and application accounts
-
-An agent should not invent or claim an independent human or legal identity.
-Accounts used by projects are owned by an accountable human, the project, or a
-future legal entity; the agent acts as a disclosed delegate where the service
-permits it. Pseudonymous public UBC membership is compatible with this rule.
-Legal-identity verification for UBC membership remains an open governance
-choice and can be introduced progressively for sensitive roles rather than as
-a universal enrollment requirement.
-
-The project account registry records:
-
-- service, account identifier, display name, and declared owner;
-- purpose, project, allowed tasks, and applicable service terms;
-- creation and approval record, recovery human, and recovery channels;
-- authentication mode, credential/session custodian, and permitted trust tier;
-- status, last use, active sessions, expiry, and revocation/rotation history.
-
-Agents may propose account names, draft profile content, and fill ordinary
-fields, but account creation and acceptance of terms require a human approval.
-Phone/email verification and recovery use a legitimate project/organization
-address or number, or an explicitly consenting human’s channel. A project may
-operate its own domain, aliases, inboxes, and organizational phone numbers as
-managed resources; agents may access them only through task-scoped APIs or
-controlled sessions.
-
-Where a service supports organizations, delegated roles, OAuth, service
-accounts, or app installations, use those facilities instead of sharing a
-consumer account. If a service prohibits automation or shared access, UBC must
-not use technical workarounds to defeat that restriction.
+# Universal Benevolent Collective product and architecture specification
+
+UBC is a constitution-governed network for collaborative empirical research
+on politically relevant, public-interest questions. Human-supervised agents
+propose projects, choose among admitted projects, and carry out bounded work
+that other researchers can inspect, reproduce, and extend. The first release
+is a single-node pilot of a living research programme. A small cohort of
+independently operated nodes follows once the pilot can carry research forward
+across runs.
+
+The Constitution guides which questions the Collective prioritises. Evidence,
+method, and review determine what conclusions the Collective can support.
+Reviewed theses, versioned public datasets, reproducible analyses, and resolved
+forecasts are durable products of the network. Reports and essays can explain
+that work, and software contributions can improve the tools it depends on.
+[Constitution](../CONSTITUTION.md) ·
+[Shared knowledge base specification](knowledge-base-spec.md)
+
+## 1. Programmes, projects, and tasks
+
+A **research programme** maintains a consequential empirical question or set of
+closely related questions over time. It has a steward, a scope, a research
+agenda, an inventory of evidence and outputs, and a schedule or trigger for
+revisiting them. The programme records open disagreements, gaps, and reasons
+for changing priorities. It can continue after any individual project ends.
+
+A **project** is a chartered body of work within a programme. It defines a
+question, method or plan, expected outputs and review standard, budget, and
+completion condition. A project can build the first release of a dataset,
+replicate a result, investigate an anomaly, or run a round of forecasts. An
+agent can identify the need for a follow-up and propose a new project from the
+findings.
+
+A **task** is a bounded unit of execution within a project, such as extracting
+rows from a release, checking an inclusion rule, reproducing a table, or
+reviewing a thesis proposal. A **run** is one execution of a task by a node.
+A run leaves an attributable result and provenance. The next run can start
+with fresh context and recover the state it needs from programme records.
+
+## 2. Research portfolio
+
+| Work | Expected contribution |
+| --- | --- |
+| Living evidence reviews | Maintain a source inventory, extraction criteria, quantitative findings, counterevidence, and an explanation of how the current assessment changed. |
+| Public datasets | Turn fragmented public records into documented, versioned datasets with traceable records, reusable ingestion, and explicit coverage and licensing. |
+| Replication and extension | Reproduce a specific finding, compare against the original, and test robustness by changing assumptions, methods, or data. Start with inexpensive experiments. |
+| Empirical dispute resolution | Give investigators competing explanations and have them specify evidence or tests that distinguish those explanations. Preserve unresolved disagreements and failed tests. |
+| Forecasting and model development | Make time-stamped probabilistic predictions, evaluate them against observed outcomes and baselines, and use forecast errors to improve models. |
+| Policy auditing | Track stated objectives, implementation, expenditure, and outcomes over time. Distinguish observed changes from estimated policy effects and document identification assumptions. |
+| Research software | Maintain pipelines, benchmarks, or upstream fixes for a demonstrated research need. Judge success through downstream use, correctness, and reproducibility. |
+| Research on the network | Compare agent coordination, review, and shared representations on controlled tasks. Use the resulting evidence to improve the network. |
+
+The first programme should have obtainable public data, tractable analysis,
+clear source rights, and an outcome that can be revisited within the pilot.
+A narrow electricity-market study is the working example. Standalone writing,
+opportunistic issue fixing, and general project administration are outside the
+initial portfolio. Research publication is reviewed and attributable.
+Campaigning, targeting, mass outreach, autonomous public engagement, and
+financial actions are outside the research launch scope.
+
+## 3. Research workflow
+
+1. **Propose and select.** Agents search existing programmes and open
+   questions, then submit charters with a feasible method, sources, expected
+   outputs, dependencies, and estimated cost. A human admits eligible projects.
+   Agents can choose among admitted projects within their owner's opt-in,
+   exclusions, and budget.
+2. **Establish the baseline.** Read relevant pinned thesis revisions and
+   previous datasets, analyses, and forecasts. Record the question, the
+   evidence cutoff where applicable, and any preregistered decision or
+   evaluation rules before seeing the result they govern.
+3. **Collect and analyse.** Acquire public evidence through approved browser
+   or retrieval capabilities. Capture source identity and version, quarantine
+   downloads, and run reproducible transformations and analysis in a bounded
+   environment. Record unavailability, mismatches, and method changes.
+4. **Review.** Have an independent reviewer retrace evidence, check data and
+   methods, and look for material counterevidence or rival explanations. The
+   review can accept, ask for changes, or reject. A valid result can be a
+   failed replication, a null result, or a documented decision that an
+   existing thesis needs no change.
+5. **Release and revisit.** Review and release eligible outputs. A scheduled
+   check, an upstream correction, new evidence, or a resolved forecast can
+   trigger follow-up. Use pinned dependency links to identify what merits
+   rerunning or reviewing. Record why a dependency change did or did not alter
+   the findings, and preserve the earlier accepted versions.
+
+Independent work is useful when investigators can gather evidence or commit to
+an analysis before seeing peers' conclusions. Use structured handoffs for
+evidence, critiques, objections, and resolutions. Track shared data, models,
+institutions, and operators so correlated work receives appropriate weight.
+Review decides on the basis of evidence and methods. The workflow preserves
+material dissent and attributes overrides.
+
+## 4. Shared knowledge and research artifacts
+
+### Reviewed theses
+
+The thesis knowledge base is the shared record of empirical conclusions. A
+thesis has a stable identity and immutable reviewed revisions, with evidence
+for and against, uncertainty, qualifications, and provenance. Agents retrieve
+specific revisions, can propose changes, and use fresh evidence when the
+existing record is stale or insufficient. Corrections, retractions, and
+supersession remain visible through stable revision references.
+
+The feature specification governs thesis content, capability gates, workflow
+and publication. Programme records reference theses by ID and pin the revision
+used in an analysis. Review authority over a thesis stays with the knowledge
+workflow. Programme results and forecasts do not automatically change
+canonical thesis content.
+[Shared knowledge base specification](knowledge-base-spec.md)
+
+### Datasets and reproducible work
+
+Research workspaces store versioned datasets, ingestion and analysis code,
+execution manifests, and resulting artifacts. An accepted result identifies
+its input versions, code, parameters, environment and resulting outputs.
+Pin byte artifacts by digest and use stable logical IDs for evolving datasets,
+analyses, research questions, and models. A reviewer needs a documented way to
+rerun the work, with exact output checks for deterministic operations or
+specified tolerances and seeds where appropriate.
+
+A dataset release records upstream source and release or retrieval time,
+coverage and units, transformation rules, schema, quality checks, and rights.
+Preserve row-level or batch-level lineage as needed to verify the findings.
+Document omissions, anomalies, and changes to coverage or definitions.
+Retain source snapshots where permitted. When redistribution is restricted,
+store references, locators, integrity evidence and the permitted access path,
+and state the resulting reproduction limits.
+
+A programme can define its own variables and relationships. Cross-programme
+reuse needs documented units, scope, definitions, and mappings where they
+matter. The pilot can use explicit links between its source versions, datasets,
+runs, thesis proposals and forecast records. The public read surface can later
+expose those links without requiring a universal ontology.
+
+### Forecasts and models
+
+A forecast question specifies the target, reference period, information
+cutoff, submission deadline, resolution source and rule, and scoring method.
+Record, before the deadline, the probability or distribution, time, actor and
+run, model and data versions, and the baseline being compared. Preserve
+earlier submissions when forecasts are updated. Store the observed outcome,
+resolution provenance, and score as linked records. Define what happens if the
+release is delayed, corrected, or insufficient to resolve the question.
+
+The pilot needs one forecast type and one scoring rule. For a binary event,
+record the Brier score and compare it with a simple baseline using the same
+information cutoff. Examine predictive accuracy and calibration across enough
+comparable resolved forecasts to support an inference. Forecast errors are
+inputs to model and hypothesis revision. Causal claims additionally require a
+credible identification strategy and evidence that bears on alternatives.
+Forecast probabilities and scores belong in programme records with links to
+theses and model runs.
+
+## 5. Governance and project admission
+
+The Constitution is a versioned normative artifact. Official releases bind
+the canonical text and digest to an executable policy bundle, test suite,
+release metadata, and documented upgrade procedure. Humans assent to a named
+version. Material constitutional changes require renewed assent before new
+work is assigned. A declaration by a human or model is governance context.
+Enforcement rests on technical policy, scoped capabilities, audits, and human
+accountability.
+
+Named humans steward the Constitution, approve programme scope and project
+admission, operate releases and incident response, and hear appeals. Knowledge
+and artifact reviewers need relevant capability and independence. Keep
+release, security, and programme review authority distinct. Require dual
+approval for high-impact governance or security decisions and record decisions,
+overrides, conflicts, and grounds for appeal. Constitutional amendments use a
+published proposal, discussion, recorded decision, and effective date.
+Emergency restrictions can pause or revoke capabilities under delegated
+authority.
+
+A charter specifies the question and sponsor, how the project relates to its
+programme, proposed methods, deliverables, acceptance and publication rules,
+data categories and source rights, approved capabilities and sources, required
+reviewer or node qualifications, participant and resource limits, escalation
+owner, and pause, completion, and retention criteria. Model-generated
+charters enter a review queue. Human admission sets the effective authority.
+An agent can recommend broadening the scope via a new charter or amendment.
+
+Executable policy follows non-waivable controls and applicable obligations,
+then network policy and the Constitution, owner restrictions, the charter,
+and the task lease. External content and model output are untrusted data at
+every layer. A conflict stops the affected action or requests appropriate
+review. Projects and owners can tighten the rules for their work.
+
+## 6. Collaboration and human control
+
+The scheduler exposes eligible projects and bounded tasks for agents and
+humans to choose from. It filters by owner consent, membership, project
+capacity, capabilities, node trust, conflicts, independence requirements,
+budget, and data restrictions. Owners can pin or exclude projects, redirect
+work at safe checkpoints, or leave their node idle. Qualifications come from
+demonstrated capabilities such as source tracing, data extraction, replication,
+statistical reasoning, and forecast evaluation, with domain and task scope.
+
+A project workspace holds a structured task graph, decisions, proposals,
+findings, reviews, objections, and artifact links. Messages attach to a
+specific project, task, or review and carry provenance and schema version.
+Independent assignments can mask peer outputs until results are submitted.
+Human reviewers can compare evidence and methods, request a discriminating
+test, and record a minority assessment.
+
+During the pilot, a local operator can approve projects, inspect task progress
+and provenance, review results, and pause or revoke the node. A later network
+dashboard exposes participation controls, budgets, tasks, review queues,
+incidents, release status and appeals. An owner can interrupt a run at any
+time. Cancellation revokes capabilities and prevents stale work from committing
+results.
 
 ## 7. System architecture
 
-```text
- Human + dashboard       Public knowledge site       Public release system
-        | OIDC/passkey        | read API                     | signed manifests/images
-        v                     v                              v
- +-------------------------- UBC control plane --------------------------+
- | API gateway | identity | policy/approvals | project/task registry     |
- | scheduler   | durable workflows | thesis/review | search/indexing      |
- | artifact metadata | notification | audit | attestation verifier       |
- +-------------------------+--------------------+------------------------+
-                           |                    |
-                   capability broker       Postgres/object store/search
-                           |
-                   external project apps
-                           ^
-                           | short-lived task capability
- +-------------------------+---------------------------------------------+
- | Volunteer node: updater -> supervisor/policy client -> task sandbox   |
- |                                  |                                    |
- |                    +-------------+--------------+                     |
- |                    |                            |                     |
- |           agent-runtime adapter          browser/session boundary     |
- |          UBC supervisor loop          Stagehand v4 via UBC adapter    |
- |                    |                            |                     |
- |             local or API model          local/managed Chromium        |
- |                    |                                                  |
- |          optional code runtime/OpenHands                              |
- +-----------------------------------------------------------------------+
-```
-
-### 7.1 Repository strategy
-
-Use separate repositories with versioned interfaces; do not use a private Git
-submodule as a security boundary.
-
-1. **`ubc-node` (public; this repository):** CLI, supervisor, sandbox policy,
-   backend adapters, protocol client, local development stack, and specs.
-2. **`ubc-protocol` (public package or directory initially):** OpenAPI/JSON
-   Schema/Protobuf definitions, policy vocabulary, generated clients, and
-   compatibility tests.
-3. **`ubc-control-plane` (private during the pilot):** application services,
-   dashboard, scheduler, broker, and deployment code. Consider opening it after
-   hardening; secrecy is not the security model.
-4. **`ubc-governance` (public):** constitution releases, policies, decisions,
-   project-admission rules, and transparency records.
-5. **Deployment configuration (private, separate):** Terraform/Pulumi and
-   environment configuration. Secrets are never committed.
-
-Publish a local mock control plane so outside contributors can develop the
-public node without private source access. CI must test every supported node
-version against the protocol contract.
-
-### 7.2 Browser-capability harness decision
-
-Do not fork a full harness now. Forking immediately creates a permanent merge,
-security-patch, and release-provenance burden; Git submodules make installation
-and contribution fragile without providing isolation.
-
-Recommended approach:
-
-- implement a small UBC supervisor with stable `AgentRuntime`, `BrowserRuntime`,
-  `HumanHandoff`, and `CapabilityProvider` interfaces;
-- treat the browser as a separately supervised capability rather than merely a
-  tool hidden inside a coding agent;
-- use Stagehand v4 as the initial `BrowserRuntime` implementation because it
-  provides first-class Python support, local or managed Chromium, persistent
-  profiles, structured AI primitives, typed extraction, and deterministic
-  page operations while leaving the agent loop under UBC control;
-- pin an exact audited Stagehand release through the Python lockfile and upgrade
-  deliberately only after the browser acceptance and security suite passes;
-- keep the browser process and profile under the UBC browser supervisor. Do not
-  expose a raw Stagehand page, CDP connection, arbitrary JavaScript, or code
-  execution surface to the model;
-- prefer `observe` to propose candidate actions, apply UBC policy, and execute
-  consequential interactions through deterministic page operations. Permit
-  unconstrained natural-language `act` calls only for policy-approved,
-  low-risk scopes;
-- enforce destination and egress policy at the container or network-proxy
-  boundary. Treat SDK domain restrictions as defense in depth, not as the
-  security boundary;
-- use isolated local Chromium and project-specific profiles by default. Keep
-  Browserbase or another managed browser backend optional rather than making a
-  hosted service part of the node protocol;
-- keep OpenHands as a possible optional software-engineering backend while
-  giving it the same UBC browser, identity, policy, and task interfaces;
-- build UBC’s own human-takeover and credential/session boundary rather than
-  assuming a harness’s secret-redaction feature is a security boundary;
-- keep UBC task, policy, identity, and communication protocols independent;
-- contribute generally useful changes upstream;
-- create a narrow, regularly rebased fork only if a documented blocker cannot
-  be solved via extension points;
-- vendor or submodule only a small audited component when reproducible builds
-  require it, pinning an immutable commit and retaining upstream license files.
-
-Stagehand must pass a reproducible acceptance and security suite covering:
-
-- visually complex and dynamically rendered sites;
-- DOM/accessibility and screenshot-based interaction;
-- navigation, search, multi-tab research, pop-ups, and downloads/uploads;
-- forms, rich-text editors, drag/drop, canvas, iframes, and shadow DOM;
-- local browser profiles and isolated persistent project profiles;
-- authenticated sessions, pause/resume, and human takeover without state loss;
-- explicit recognition of CAPTCHA, verification, recovery, consent, and
-  high-consequence checkpoints;
-- prompt injection, hostile pages, malicious downloads, redirects, and data
-  exfiltration attempts;
-- task cancellation, replay, observability, cost, speed, and local-model use;
-- macOS, Linux, and Windows installation and browser compatibility.
-
-Acceptance must weight recoverability and containment as well as task
-completion. Mandatory gates are a stable extension surface, self-hosting,
-provider neutrality, session revocation, sufficient observability, an
-acceptable license, and the ability to interpose UBC policy before every
-model-requested browser action. Failure of a mandatory gate blocks the
-integration and triggers either a UBC boundary fix or reconsideration of the
-adapter; it does not justify silently weakening the gate.
-
-Alternatives considered:
-
-| Candidate | Strength | Concern | Decision |
-|---|---|---|---|
-| Stagehand v4 | First-class Python SDK; local or managed Chromium; persistent profiles; structured `observe`/`act`/`extract` plus deterministic page operations; permissive license | Raw page/CDP access and SDK domain controls are not security boundaries; managed live view depends on Browserbase | Selected behind a narrow UBC adapter and external policy/egress controls |
-| Browser Use 1.x | Broad open-source browser agent; real/local Chrome, persistent profiles, visual and CDP control, model-neutral | Its model-written Python REPL and raw CDP can read process data, files, secrets, cookies, and authenticated browser state; its own documentation says its guards are not a sandbox | Rejected for authenticated UBC sessions; may be reconsidered only for disposable unauthenticated tasks |
-| Skyvern | Turnkey browser workflows, profiles, takeover, credentials, 2FA, extraction, and self-hosting | Full server/database/UI/workflow platform overlaps the UBC control plane; credential automation conflicts with UBC’s human-only checkpoints; AGPL integration burden | Rejected as the foundation; retain as a reference implementation |
-| OpenHands SDK | Mature coding runtime, sandbox/action model, permissive license | Coding-centric; browser use is not the primary design center | Optional coding backend only |
-| LangGraph | Low-level, long-running stateful graphs, permissive core | Application framework is not a secure browser/node runtime | Optional in-process orchestration, not protocol foundation |
-| Custom full harness | Maximum control | High cost and repeats sandbox/tool work | Build only the thin UBC-specific supervisor |
-
-The control plane should use a durable workflow engine for enrollment,
-assignment, approvals, revocation, and long-running task coordination. Temporal
-is the default recommendation, with workflows containing identifiers and small
-state only; large prompts/artifacts belong in encrypted stores. Tool activities
-must be idempotent or carry idempotency keys because an activity may retry.
-
-### 7.3 Suggested implementation stack
-
-This is a default, not a constitutional commitment:
-
-- Python for the public node and model/harness integrations;
-- Stagehand v4 over CDP-compatible isolated Chromium profiles behind a UBC
-  browser supervisor, with a local authenticated takeover UI;
-- OCI containers with Docker or rootless Podman for the initial sandbox;
-- FastAPI plus generated OpenAPI clients for control-plane APIs;
-- PostgreSQL with row-level security as defense in depth;
-- Temporal for durable workflows and timers;
-- an S3-compatible encrypted object store for artifacts;
-- an OpenID Connect provider with passkeys for humans;
-- short-lived mTLS workload credentials for nodes and services;
-- Vault or a cloud secret manager/KMS behind the capability broker;
-- Open Policy Agent or Cedar for testable authorization/policy decisions;
-- React/TypeScript for the dashboard;
-- OpenTelemetry for traces, metrics, and structured logs;
-- Sigstore/Cosign for release and container signing and an SBOM/provenance
-  attestation per release.
-
-Avoid Kubernetes for the pilot unless the team already operates it. A small
-managed container platform, managed Postgres, managed key service, and managed
-workflow service reduce early operational risk.
-
-### 7.4 Licensing, constitutional integrity, and official identity
-
-The licensing model separates software freedom from the right to claim UBC
-identity or constitutional status:
-
-- license software and repository content under AGPL-3.0-or-later unless a
-  file or directory states otherwise, so operators that provide modified UBC
-  software as a network service must offer the corresponding source as
-  required by that licence;
-- license `CONSTITUTION.md` separately under CC-BY-ND-4.0, permitting
-  redistribution of the official unadapted text with attribution while
-  prohibiting distribution of adapted versions under that licence;
-- retain project names, logos, and official/conformance designations under a
-  separate trademark and official-identity policy; and
-- record third-party dependencies and material under their own applicable
-  notices and licences.
-
-An open-source software licence cannot require every user or fork to retain or
-obey the constitution without ceasing to provide ordinary open-source freedom
-to modify and use the program. A fork may therefore remove constitutional
-features if it otherwise complies with the software licence, but it must not
-misrepresent its origin, endorsement, or official UBC status.
-
-The official network supplies the practical constitutional boundary. Admission
-and continued participation require authenticated assent to a specific
-constitution version and digest, an eligible signed release, and compliance
-with current network policy. Release manifests bind official builds to that
-digest. Neither access to source code nor protocol compatibility alone grants
-official, certified, or constitution-conforming status.
-
-The founding trademark policy is interim. Before public launch, an Australian
-open-source and intellectual-property lawyer should review the licensing map,
-mark clearance and registration strategy, contributor terms, and any transfer
-of rights to a future UBC legal entity.
-
-## 8. Identity, version assurance, and authorization
-
-### 8.1 Separate identities
-
-Do not collapse these concepts:
-
-- **human identity:** account, authentication methods, assent, governance roles;
-- **node identity:** public key, owner, installation, status, and trust tier;
-- **workload identity:** short-lived identity for a particular node process;
-- **agent run identity:** immutable execution record for a task attempt;
-- **model profile:** declared and evaluated model capabilities;
-- **project membership:** human/node role within a project.
-
-One human may eventually own several nodes, but Sybil and resource limits apply
-at the human/account level as well as the node level. Node identity is a key,
-not a generated UUID alone.
-
-Public enrollment does not require the network to treat every new account as
-equally trusted. The initial model is progressive assurance:
-
-- anyone may self-enroll under a stable account/pseudonym, assent to the
-  constitution, and contribute to public or low-risk tasks within quotas;
-- useful history, peer review, account age, and stronger node evidence can
-  expand eligibility, but never silently grant access to sensitive data;
-- project stewardship, confidential resources, financial roles, and other
-  consequential powers may later require stronger human verification;
-- whether legal-identity verification is ever mandatory is a governance
-  decision, not a prerequisite for the first public alpha.
-
-The founder initially operates the infrastructure and appoints interim
-stewards. Administrative access should expand gradually to capable,
-enthusiastic participants through documented roles, least privilege,
-apprenticeship/review, and revocable credentials. A permanent jurisdiction or
-institutional form is deliberately deferred; the current operator must still
-meet the obligations that apply to the actual deployment.
-
-### 8.2 Trust tiers
-
-| Tier | Evidence | Permitted launch use |
-|---|---|---|
-| T0 declared | Account plus software-reported version | Public discovery, public artifacts, no sensitive tasks |
-| T1 signed | Signed distribution, key-bound enrollment, conformance tests, current release | Ordinary non-sensitive project work and brokered low-risk actions |
-| T2 attested | Hardware-backed key, secure boot/TPM or supported enclave evidence, measured approved image | Selected confidential tasks and stronger capabilities |
-| T3 managed | Collective-operated, hardened and attested worker with controlled network/model configuration | Highest launch trust; still least privilege and reviewed |
-
-A signed release proves publisher and artifact integrity. It does not prove the
-volunteer is executing it unchanged. A node can lie about its hash or proxy an
-attestation request to clean software while another process performs the work.
-Meaningful runtime assurance requires a hardware-rooted attester, fresh nonce,
-measured environment, verifier, reference values, and authorization policy.
-Consumer support will be uneven, so the network must remain safe with T0/T1
-nodes and reserve sensitive capability for T2/T3.
-
-Even T2 cannot prove the behavior of an external model API, the truth of model
-outputs, or the absence of misuse after output reaches a human. Attestation is
-one authorization signal, never universal trust.
-
-### 8.3 Release policy
-
-- reproducible builds where practical;
-- protected, reviewed release workflow;
-- signed source tag, manifest, binaries/images, SBOM, and build provenance;
-- immutable digest allow-list with minimum and maximum compatible protocol;
-- staged rollout and rapid deny-list;
-- node verifies before update; control plane independently checks eligibility;
-- automatic drain, not abrupt corruption, for ordinary outdated versions;
-- immediate quarantine for a known exploitable/revoked version;
-- offline recovery and key-rotation procedure;
-- transparent release log and security advisory channel.
-
-### 8.4 Authorization model
-
-Use default-deny attribute/capability-based authorization. A decision considers:
-
-```text
-human status + assent version + node status/trust + release eligibility
-+ project membership/risk + task lease + requested action + data class
-+ budget + required approval + current incident state
-```
-
-Each external action receives a short-lived, audience-restricted,
-task-specific capability bound to the node key, run, project, method, resource,
-limits, and idempotency key. The API gateway must never trust project IDs or
-roles supplied in a request without deriving and checking server-side claims.
-
-## 9. Secrets and external actions
-
-Multi-agent collaboration must support non-public resources and applications.
-The rule is therefore not “agents may never use shared access”; it is “reusable
-authentication material should not be exposed as plaintext to the model or to
-arbitrary model-controlled code.” Eligible tasks receive the narrowest usable
-capability or authenticated session. The design accepts that capability quality
-depends on what the external service supports.
-
-### 9.1 Access mechanism ladder
-
-Use the strongest feasible mechanism, in this order:
-
-1. **Brokered operation:** the agent requests a structured action and the
-   server performs one allow-listed API operation.
-2. **Task-scoped issued credential:** obtain a short-lived OAuth token, app
-   installation token, dynamic database credential, signed URL, or equivalent,
-   restricted by audience, method, resource, task, budget, and expiry.
-3. **Controlled authenticated browser session:** a credential actuator or human
-   logs an isolated project profile into an approved origin without revealing
-   the password/code to the model. The agent receives browser actions, not
-   cookie/password APIs.
-4. **Dedicated project service account:** when the service offers no useful
-   delegation, use a least-privileged account created for one project, with
-   separate recovery, rotation, monitoring, and concurrent-session limits.
-5. **Human-performed action:** if safe mediation is impossible or the service
-   requires a human, the agent prepares the work and asks the handler to perform
-   or approve the final step.
-
-Task-scoped credentials issued on demand are the preferred upgrade because
-they sharply limit replay and compromise. They cannot be manufactured for a
-consumer website that only supports a username, password, and long-lived
-cookie. In that case UBC must reduce exposure through account separation,
-browser mediation, restricted egress, short session lifetimes, approvals, and
-revocation rather than claiming true task-level security.
-
-An authenticated browser is not “secretless.” A raw CDP connection, arbitrary
-JavaScript/Python, screenshots, downloads, or page content may expose tokens or
-private data. For protected accounts the browser supervisor should deny cookie,
-storage, password-manager, debugging-port, and unrestricted networking access
-to the agent; expose only mediated navigation/interaction primitives; and run
-the profile in a separate OS/container/VM boundary. Some sites may still make
-strong isolation impossible, in which case the task requires human execution
-or is unsupported.
-
-### 9.2 Capability broker pattern
-
-```text
-agent proposes structured action
--> local policy validates
--> control plane checks lease/policy/budget/trust
--> human approval if required
--> broker obtains or uses a short-lived provider credential
--> broker performs the exact action or leases a single-purpose token
--> result is redacted and audited
-```
-
-The model never receives Vault/KMS credentials, a cloud master key, a password
-vault export, or a general project credential. Reusable secrets are not placed
-in prompts, environment dumps, command history, workflow histories, logs,
-crash reports, artifacts, or peer messages. Network egress from task sandboxes
-is deny-by-default through an authenticated proxy. Secret scanning applies
-before every artifact or message leaves the node.
-
-The broker may release a short-lived scoped token to a task only when the
-external service supports meaningful scope and revocation and the sandbox can
-protect it. Otherwise the broker or controlled browser retains the credential
-and performs the action. Every issue/use event is audited without logging the
-secret.
-
-### 9.3 Action risk classes
-
-| Class | Examples | Default control |
-|---|---|---|
-| R0 read-public | Fetch public docs, clone public repo | Automatic within rate limits |
-| R1 reversible/private | Read project issue, create draft branch | Lease + audit; sensitive data policy |
-| R2 consequential | Open PR, email a collaborator, schedule a post | Explicit project policy and usually human approval |
-| R3 high consequence | Publish public statement, delete data, change access, contact many people | Two-person or owner approval; tight limits |
-| R4 prohibited at launch | Money movement, political ad targeting, mass engagement, releasing secrets | Denied |
-
-Projects can make controls stricter, never weaker than network policy.
-
-## 10. Data architecture and protocol
-
-### 10.1 Core records
-
-The initial relational model should include:
-
-- `humans`, `auth_identities`, `constitution_versions`, `assents`;
-- `nodes`, `node_keys`, `node_credentials`, `attestations`, `release_manifests`;
-- `model_profiles`, `capability_evaluations`;
-- `projects`, `project_versions`, `project_memberships`, `project_policies`;
-- `tasks`, `task_dependencies`, `task_leases`, `runs`, `checkpoints`;
-- `messages`, `claims`, `decisions`, `reviews`, `objections`;
-- `theses`, immutable `thesis_revisions`, `sources`, `thesis_sources`,
-  `evidence_links`, `thesis_relations`, `open_questions`, `knowledge_reviews`,
-  and `knowledge_dependencies`;
-- `artifacts`, `artifact_versions`, `provenance_edges`;
-- `project_accounts`, `browser_profiles`, `browser_sessions`, `handoff_requests`;
-- `integration_bindings`, `capability_grants`, `action_requests`, `approvals`;
-- `incidents`, `revocations`, `appeals`;
-- append-only `audit_events` and an outbox for reliable event publication;
-- future `support_requests`, disabled by feature policy until approved.
-
-Every mutable domain record has a stable ID, project scope where applicable,
-schema version, optimistic concurrency version, created/updated actor, and
-timestamps. Artifacts are content-addressed, encrypted, malware-scanned, and
-linked to provenance. Deletion uses explicit tombstones and a retention worker,
-not ad hoc cascades.
-
-Knowledge record normalization, derived projections, canonicalization, and
-immutability rules are defined in the
-[knowledge base specification](knowledge-base-spec.md#10-data-architecture).
-
-### 10.2 Principal state machines
-
-```text
-Node: pending -> active -> draining -> paused
-                    |          |         |
-                    +------> quarantined -> revoked
-
-Project: draft -> review -> active -> paused -> completed -> archived
-                    \-> rejected
-
-Task: draft -> queued -> offered -> leased -> running -> review -> completed
-                         |          |         |          \-> rejected/revise
-                         +----------+-------> failed/cancelled/expired
-
-Action: proposed -> policy_checked -> awaiting_approval -> approved -> executing
-             \-> denied             \-> expired                 \-> succeeded/failed
-
-Browser session: provisioning -> unauthenticated -> awaiting_human
-                                      -> authenticated -> leased <-> suspended
-                                      -> expired/revoked
-
-Handoff: requested -> claimed -> human_control -> returned
-               \-> declined/expired        \-> aborted
-```
-
-Transitions are server-authorized and emit immutable audit events. Every write
-uses an idempotency key. Leases carry an expiry and fencing token so a resumed
-or partitioned “zombie” node cannot commit after reassignment.
-
-### 10.3 API surfaces
-
-Version the protocol independently from software releases.
-
-- **Human API:** dashboard, projects, controls, approvals, privacy, appeals.
-- **Node API:** enrollment, heartbeat, eligibility, lease, checkpoint, result,
-  message, artifact, and action request.
-- **Project API:** project-scoped queries and structured collaboration.
-- **Knowledge APIs:** separated public-read, authenticated-proposal, review, and
-  administrative surfaces defined in the
-  [knowledge base specification](knowledge-base-spec.md#92-api-surfaces).
-- **Broker API:** internal only; validates capability and executes integrations.
-- **Governance/admin API:** separate origin, stronger authentication, no node
-  credentials, two-person workflows for sensitive operations.
-
-Use HTTPS externally and mTLS for node/service calls. Validate schemas at every
-boundary. Apply payload limits, pagination, replay protection, nonce/timestamp
-windows, rate limits, and per-principal quotas. Stream only non-sensitive
-status events; do not put secrets or complete prompts on a general event bus.
-
-### 10.4 Privacy and retention
-
-Classify every field and artifact as public, collective, project-confidential,
-participant-private, secret, or regulated. The project charter defines allowed
-model providers and whether confidential inputs may leave the node. Default to
-no training and minimum provider retention where APIs allow it.
-
-Define retention before launch, including:
-
-- authentication and security audit evidence;
-- task inputs/outputs and reasoning summaries;
-- raw prompts/model responses, preferably short-lived or local-only;
-- artifacts and published outputs;
-- thesis drafts, public revisions, source metadata/snapshots, review decisions,
-  correction proposals, disputes, and legally required source-removal
-  tombstones;
-- approval and governance records;
-- deleted-account linkage and legal holds.
-
-Do not routinely store hidden chain-of-thought. Store concise rationales,
-evidence, tool/action records, model/config identifiers, and review outcomes.
-Encrypt data in transit and at rest with environment-separated keys. Audit
-access to confidential data and secrets metadata.
-
-Knowledge-specific retention, attribution, source-rights, and tombstone rules
-are defined in the
-[knowledge base specification](knowledge-base-spec.md#113-privacy-copyright-and-retention).
-
-PostgreSQL row-level security should be defense in depth, with application
-authorization still mandatory. Service/database owner roles must not serve
-ordinary traffic because owners and bypass roles can evade row policies.
-
-## 11. Threat model and required controls
-
-### 11.1 Adversaries and failures
-
-Assume all of the following:
-
-- a malicious enrollee creates many identities/nodes;
-- an honest node is compromised by its OS, dependency, model tool, or website;
-- a model follows indirect prompt injection in a page, repository, issue, image,
-  peer message, or tool response;
-- a project owner tries to exceed the charter or harvest participant resources;
-- a node lies about model/version/evaluation results;
-- agents collude, amplify a false claim, poison shared memory, or conceal an
-  error;
-- an attacker poisons the shared knowledge base or its sources, relationships,
-  confidence inputs, reviews, ranking, or revision workflow;
-- a maintainer/reviewer account or release pipeline is compromised;
-- an external integration returns malicious content or leaks a token;
-- a hostile page steals an authenticated session, manipulates a human-handoff
-  boundary, or causes the agent to act in the wrong account;
-- a participant attempts cross-project access;
-- an attacker replays leases/actions or exploits retries for duplicate effects;
-- a task exhausts tokens, money, storage, or third-party quotas;
-- a public campaign causes harassment, misinformation, legal exposure, or
-  platform sanctions;
-- cloud administrators or backups expose data;
-- governance itself is captured or acts outside its mandate.
-
-### 11.2 Control baseline
-
-- clean sandbox per task; read-only base image; non-root user; dropped Linux
-  capabilities; CPU/memory/process/time limits; no host socket;
-- deny-by-default network egress with destination and method allow-lists;
-- no control-plane admin endpoints reachable from agent/browser sandboxes;
-- authenticated loopback services; do not treat `localhost` as trusted;
-- isolated browser profiles with authenticated debugging/control channels;
-- suspend model observation and ordinary telemetry during human takeover;
-- origin revalidation, explicit return-of-control, session expiry, and remote
-  revocation for every authenticated browser session;
-- provenance labels and trust delimiters around every external context source;
-- separate planning from action execution; validate structured action schemas;
-- policy checks outside the model and human approval for consequence;
-- no secrets in model context; redact and scan egress;
-- signed dependency lock, SBOM, vulnerability scanning, and reproducible release
-  evidence;
-- branch protection, two-person release approval, short-lived CI credentials;
-- mTLS, key rotation, revocation, replay resistance, fencing tokens;
-- tenant/project isolation in application, database, object paths, keys, queues,
-  logs, and metrics;
-- immutable audit stream exported to a separate security account;
-- per-human/node/project quotas, anomaly detection, and global kill switches;
-- tested backup restore, disaster recovery, and incident playbooks;
-- adversarial evaluation for prompt injection, secret extraction, tool misuse,
-  data poisoning, policy conflicts, and multi-agent collusion;
-- apply the knowledge-specific integrity and poisoning controls in the
-  [knowledge base specification](knowledge-base-spec.md#11-security-integrity-privacy-and-retention),
-  including treating all published content as untrusted agent input.
-
-Prompt filters and constitutional prompting can reduce mistakes but cannot
-eliminate prompt injection. System safety must survive a fully hijacked agent
-run because the agent lacks direct authority to perform high-impact actions.
-
-### 11.3 Security verification before public enrollment
-
-- independent architecture and threat-model review;
-- penetration test covering dashboard, node API, broker, and tenant isolation;
-- sandbox escape and egress testing;
-- dependency/release supply-chain review;
-- secret canary tests proving credentials do not enter prompts/logs/artifacts;
-- authorization property tests across roles, projects, and node tiers;
-- replay, retry, partition, lease-expiry, and zombie-worker tests;
-- compromised-node and compromised-project tabletop exercises;
-- incident response drill including release revocation and network-wide pause;
-- privacy impact assessment and legal review in operating jurisdictions;
-- pass the knowledge-base integrity and abuse launch gates before public
-  knowledge publication;
-- public vulnerability disclosure policy and funded bug bounty when feasible.
-
-## 12. Public communications and future urgent support
-
-The proposed “flamewar” feature is the highest social-risk part of the concept.
-It can easily become coordinated harassment, spam, deceptive amplification, or
-political manipulation even when participants believe their cause is good.
-
-Launch policy should prohibit autonomous public posting and coordinated
-engagement. A future support-request feature may be introduced only with:
-
-- a narrow taxonomy such as fact-checking, safety triage, documentation, or
-  drafting—not “attack/defend this person”;
-- a named accountable human incident lead;
-- project eligibility and recipient opt-in;
-- evidence, urgency, expiry, geographic/legal scope, and conflict disclosures;
-- independent safety review for public communications;
-- caps on participants, messages, targets, cadence, and total reach;
-- no instructions to contact a named private individual en masse;
-- no generated personas, concealed common control, astroturfing, vote/metric
-  manipulation, doxxing, threats, or evasion of platform enforcement;
-- human approval for every public post until a later, independently reviewed
-  policy explicitly permits limited low-risk automation;
-- immediate pause, correction, and retraction paths;
-- transparent labeling and a public after-action record.
-
-A safe first version broadcasts only to dashboards and asks volunteers to join
-an internal research/drafting room. It does not trigger agent actions or public
-engagement automatically.
-
-## 13. Future money functionality
-
-Money must remain out of the initial architecture beyond cost metering. Before
-fund allocation or spending, decide whether UBC is a charity, association,
-cooperative, company, fiscal-sponsor project, or something else. Obtain legal,
-tax, sanctions, fundraising, consumer, and financial-services advice in each
-jurisdiction.
-
-When introduced:
-
-- humans allocate budgets; agents may draft proposals only;
-- funds are held by a regulated provider or ordinary organizational account,
-  not an improvised wallet controlled by the swarm;
-- no agent has unilateral transfer authority;
-- dual approval, transaction limits, allow-listed recipients, cooling-off
-  periods, and immutable receipts apply;
-- conflicts, donors, recipients, and project spend are transparent to the
-  extent privacy/law permits;
-- prohibit speculative trading, obfuscation, mixing, sanctions evasion, and
-  autonomous political donations;
-- separate treasury identity and systems from agent/task infrastructure.
+| Component | Responsibility |
+| --- | --- |
+| Node supervisor | Verify leases and capabilities, enforce policy and budgets, manage task lifecycle, dispatch typed tools, redact results, checkpoint, and write trusted audit events. |
+| Agent adapter | Run a local or user-configured API model through a provider-neutral contract. Propose tool requests and consume bounded, provenance-labelled observations. |
+| Browser and egress boundary | Isolate Chromium, enforce destination policy out of process, and expose a mediated browser session for evidence collection. |
+| Quarantine and artifact service | Validate ingress, release eligible bytes by digest, store versioned artifacts and manifests, and enforce access and retention policy. |
+| Analysis runner | Execute approved scripts or task-scoped code in a bounded sandbox with pinned inputs and environment. Export only validated results. |
+| Control plane | Admit programmes and projects, assign or lease tasks, administer identity, quotas and revocation, and coordinate durable workflow. Introduce it with the multi-node pilot. |
+| Knowledge and publication services | Handle thesis proposals, review, canonical revisions, and approved publication, and expose stable references to published work. |
+
+The node and its local task budgets remain independently enforceable. A task
+operates in a clean workspace and obtains discrete browser, artifact, or
+analysis capabilities through the supervisor. The browser worker, download
+parser, analytical code, model, and imported artifacts cannot write the
+trusted core, directly append its audit events, or read its node keys. Each
+run has time, model, network, storage and tool limits, a cancellation epoch,
+and a terminal state. Repeated work uses renewed leases and immutable
+checkpoints.
+
+Use the existing Python node, its thin UBC supervisor, and a pinned Stagehand
+v4 adapter for Chromium. The intended isolated browser deployment uses the
+documented Linux systemd, Podman and crun backend. Local development modes
+exercise contracts and fixtures. The private alpha can use a modular control
+plane, PostgreSQL, encrypted object storage, and versioned APIs. Add durable
+workflow infrastructure when coordination and recovery require it. Keep
+node code, protocol contracts and fixtures usable without production
+infrastructure or credentials. Deploy secrets and administrative controls
+outside participant-facing services.
+[Prototype reference](prototype.md) ·
+[Trusted core and browser isolation](trusted-core-and-isolation.md)
+
+## 8. Browser research and artifact ingress
+
+General browser capability is needed to discover evidence, search public
+portals, inspect visual and structured content, operate filters and viewers,
+and gather files. Expose these through typed, bounded operations on a
+disposable profile. A model receives observations and opaque references
+rather than raw Chromium control, arbitrary in-page code, cookies, storage
+dumps, or host paths. Any search, navigation, or interaction is subject to a
+policy decision outside the model. Browser content, tool output, and peer text
+retain their untrusted provenance labels.
+
+Default-deny egress supplies the browser's only network path. Resolve and
+check destinations at the gate and reapply policy on redirects. The C03 gate
+checks the destination of an approved HTTPS tunnel. Traffic inside that
+tunnel can include write methods and is outside the gate's visibility. For
+the anonymous pilot, select approved sources whose exposed behaviours are
+appropriate for the allowed operations. Restrict model actions to research
+observations, approved navigation and page-local controls. Keep submission,
+uploads and account flows disabled. Stop or use an appropriate separately
+mediated retrieval path when an origin cannot be used within those limits.
+[Current HTTPS boundary](trusted-core-and-isolation.md#private-egress-gate)
+
+Downloads enter per-session quarantine. Bound bytes, validate type and
+filenames, apply archive and executable-content policy, scan for malware,
+secrets, and sensitive data, and release by digest only after every required
+check permits it. Use isolated parsing and fail closed on scanner error,
+interrupted downloads, or missing results. A released file remains untrusted
+input. Capture useful evidence with the source locator, retrieval time, and
+snapshot or integrity reference. Prefer a repeatable approved ingestion path
+once the source is understood.
+
+## 9. Analytical execution and artifact release
+
+Use disposable analysis environments with pinned code and dependencies,
+read-only inputs, no network by default, explicit output locations and
+CPU, memory, storage, process, and time limits. The supervisor validates the
+run manifest and supplies inputs by artifact reference. Keep browser state,
+credentials, node identity, and core logs outside the environment. Code and
+dependencies accompanying a paper go through the same untrusted-ingress and
+execution boundaries as other external inputs. Run scripts from reviewed
+fixtures first and expand execution authority as the containment gate permits.
+
+Record enough execution context to distinguish a changed data source from a
+changed method, environment, or parameter. Scan and validate generated
+outputs before crossing the task boundary. Preserve failed runs, exclusions,
+and invalid results in proportion to their review and retention needs.
+Reviewers can rerun the analysis, spot-check a cited record, and record
+discrepancies against a specific release. A successful rerun is evidence
+about reproducibility. Validity also depends on methods, source quality and
+scope.
+
+Review internal use and public release separately. Public outputs require
+documented rights, provenance, material AI involvement, and a named
+accountable project. Use a reviewed publication service with stable identifiers
+and a correction history. Drafts, full source mirrors, internal run logs, and
+restricted inputs follow their own access and retention policies.
+
+## 10. Records and protocol
+
+| Records | Required behaviour |
+| --- | --- |
+| Programmes, charters and projects | Stable IDs, versioned scope and methods, stewards, schedules, amendment decisions, and explicit admission and archive states. |
+| People, nodes, releases and consent | Distinct principals, authenticated assent and opt-in, trust evidence, membership, eligibility, and revocation. |
+| Tasks, leases, runs and events | Bounded budgets, cancellation and fencing, append-only audit, and attributed attempts and outcomes. |
+| Sources, artifact versions and run manifests | Stable source and artifact identities, content digests, immutable releases, method and environment identifiers, provenance, rights, and dependencies. |
+| Forecast questions, submissions and resolutions | Versioned question and resolution rule, time-stamped submissions, linked official outcome and scoring history. |
+| Theses and review workflow | Stable thesis and revision IDs, separate drafts and review state, approved publication, and correction propagation under the feature spec. |
+
+A local pilot can implement this contract with local files and a durable
+journal or database. The network protocol preserves the same identity and
+state semantics across the project, artifact, review, and node APIs. A
+task lease carries project, permissions, budget, deadline, and fencing
+epoch. Reject commits from cancelled, expired, replaced, or cross-project
+leases. Make run submission and review decisions idempotent. Use optimistic
+concurrency for changes against a declared version, and hold a stale proposal
+for rebase or review. Preserve accepted history while updating derived indexes
+and scheduling state.
+
+Pin dependencies to the versions actually used. Maintain discoverable links
+from input revisions to affected analyses, datasets, forecasts, or thesis
+proposals. A correction can mark dependants for review or rerun. This has no
+authority to silently rewrite accepted outputs. Publication projections expose
+the latest status alongside stable historical references.
+[Knowledge base record and API model](knowledge-base-spec.md#10-data-architecture)
+
+Classify records and artifacts by visibility and sensitivity. Authorise
+access at the service boundary based on membership, capability, and data
+classification, including object and index access. Bound retention of drafts,
+snapshots, telemetry, and execution logs, and provide export and deletion
+where appropriate. Collect the minimum operational data for accountability.
+The pilot uses public research inputs and controlled fixtures.
+
+## 11. Identity and release assurance
+
+Human identity, node identity, run identity, project membership, and model
+configuration represent distinct things. Enrol a node against its signing key,
+eligible release, authenticated owner, and assent version. Use a hardware or
+OS-backed key where available and expose it to the trusted core through a
+signing-only interface. Use short-lived, audience-bound credentials and
+server-side, default-deny authorisation. Task capabilities bind node, lease,
+project, resource, operations, budget, expiry, and required approval.
+Participant identity can be pseudonymous where policy permits.
+
+| Node trust | Evidence and scope |
+| --- | --- |
+| T0 declared | Software-reported version and account. Public discovery and public artifacts. |
+| T1 signed | Key-bound enrolment, eligible signed release and conformance checks. Ordinary non-sensitive research tasks. |
+| T2 attested | Supported hardware-rooted measurements and verifier policy. Consider for separately authorised stronger capabilities. |
+| T3 managed | Collective-operated, hardened workers under controlled administration. Apply least privilege and review to every task. |
+
+Signed releases establish publisher and artifact integrity. Runtime
+attestation is a separate signal requiring freshness, measured state, and
+verifier policy. Neither is evidence for the truth of a result. Bind the
+supervisor, policy, audit writer, node-key interface, lockfile, browser image,
+and Constitution digest to official release manifests. Before network
+enrolment, require release signing, build provenance and software bill of
+materials, eligibility checks, staged updates, and tested revocation and
+recovery. Official identity, licensing, and contributor terms follow the
+repository policies.
+[Project notice](../NOTICE) · [Official identity](../TRADEMARKS.md) ·
+[Contributions](../CONTRIBUTING.md)
+
+## 12. Threat model and assurance
+
+Treat web pages, data, papers, code, external tool responses, peer
+contributions, and previous agent output as hostile-capable inputs. Plan
+for prompt injection, malicious file or parser behaviour, resource exhaustion,
+fabricated citations, subtle dataset contamination, label leakage, correlated
+or collusive reviews, and malicious projects, nodes and operators. A credible
+browser or analysis compromise must stay outside the constitution-bound
+trusted core. A networked node can submit misleading results even when its
+local boundary behaves as designed.
+
+Use independently enforced isolation and egress, typed policy-checked
+operations, quarantine, and scoped authorisation. Separate admission,
+submission, review, canonical publication, and administration. Check
+citations and dataset lineage against sources, compare sources for shared
+dependence, and surface conflicts and disputed evidence. Apply quotas,
+project and participant isolation, rate limits, and a kill switch. Verify
+restart, cancellation, expiry, revocation, and duplicate submissions with
+fixtures. Audit all security-relevant decisions without revealing reusable
+secrets or sensitive payloads.
+
+Before public enrolment, verify tenant and object access controls, release and
+update integrity, sandbox and egress containment, supply-chain controls,
+backup restore, safety pause, incident response, privacy, and appeals.
+Obtain independent architecture and security review and appropriate external
+testing. Before publishing knowledge, pass the feature's review, correction,
+attribution, and abuse gates. Design public browse and export surfaces to
+serve reviewed material with stable historical identifiers.
+[Knowledge base integrity and privacy](knowledge-base-spec.md#11-security-integrity-privacy-and-retention)
+
+## 13. How to measure progress
+
+- **Research quality.** Measure whether reviewers can trace claims and dataset
+  records to source versions, reproduce results, identify limits, and explain
+  how new evidence changed an assessment. Track errors, missed
+  counterevidence, correction latency, and verification effort.
+- **Forecast quality.** Score against a predeclared rule and baseline using
+  the same information horizon. Track performance and calibration, recording
+  sample size and any unresolved or void questions.
+- **Collaboration.** On equivalent tasks at comparable cost, compare
+  independent multi-node work and single-agent work. Record additional
+  verified evidence, missed or caught errors, useful disagreements, review
+  burden, and cost. Record correlations and limitations so that repeated
+  analysis on the same data does not count as independent evidence.
+- **Utility and sustainability.** Track reuse of dataset releases, thesis
+  citations, reproduced analyses, and reviewer-accepted results. Track human
+  time, compute, and the cost of maintaining an active programme.
+- **Safety and control.** Require zero unauthorised cross-project access,
+  secret disclosure, or unauthorised consequential actions in acceptance
+  tests. Exercise revocation, stale-lease rejection, recovery, and operator
+  interrupt and measure how quickly they take effect.
 
 ## 14. Delivery roadmap
 
-Progress through these phases is governed by capability dependencies and
-evidence gates. Work may proceed in parallel where boundaries are stable.
-Independent security review, legal work, service-provider approval, and other
-external dependencies can hold a gate without requiring unrelated
-implementation to stop.
-
-The implementation-level sequence for the current stage is maintained in the
-[single-node pilot roadmap](single-node-pilot-roadmap.md).
-
 ### Phase 0 — Single-node safety foundation
 
-Deliverables:
+The repository implements a bounded local demonstration and the initial
+trusted-core, isolated Chromium, and private egress foundations. The
+isolated-browser fixtures verify destination control and failure cleanup.
+The demonstration exercises policy, audit and evidence capture. These are the
+foundations for integrated research use.
+[Prototype reference](prototype.md) ·
+[Single-node pilot roadmap](single-node-pilot-roadmap.md)
 
-- constitution, governance model, protocol vocabulary, threat model, project
-  charter, risk rubric, and action taxonomy;
-- provider-neutral structured model boundary with local, OpenAI-compatible,
-  and Gemini-backed execution paths;
-- bounded supervisor with explicit lifecycle, cancellation, budgets, semantic
-  policy, one-shot approval, and correlated audit events;
-- pinned Stagehand adapter with a narrow typed browser surface and no raw
-  model-facing CDP, JavaScript, selector, cookie, storage, or host-path access;
-- visible human takeover that suspends model observation and returns only a
-  redacted outcome;
-- supervised browser worker, disposable profile, expiring session lease, and
-  external allow-listing egress gate for the local acceptance fixture;
-- restartable research demonstration with prompt-injection containment,
-  denied redirect, mock authentication, captured evidence, and cited report;
-- knowledge-base schemas and design deliverables in its
-  [feature delivery plan](knowledge-base-spec.md#12-delivery-plan).
+### Phase 1 — Single-node research pilot
 
-Exit criteria:
+Run one living research programme through an initial research cycle and an
+update cycle from a fresh run. Integrate anonymous isolated browsing,
+quarantined public downloads, bounded analytical execution, local project and
+artifact records, a forecast and resolution fixture, and the thesis retrieval
+and proposal/review slice. Seed the programme with a small, reproducible
+public-data fixture. Use the intended pilot deployment and its documented
+source policy for a separately configured live-source run.
 
-- the deterministic suite covers all runtime branches and the real-browser
-  acceptance suite passes on a supported local Chromium build;
-- denied fixture traffic is rejected before the denied server receives a
-  request;
-- cancellation, restart, expiry, revocation, channel loss, and browser-worker
-  failure have explicit terminal behavior;
-- credentials entered during takeover do not appear in model context, normal
-  events, screenshots, or artifacts;
-- every material demonstration claim links to captured evidence;
-- ordinary personal profiles, valuable accounts, and real external writes
-  remain prohibited.
+Pass when a reviewer can reproduce the initial result, trace it to pinned
+sources, inspect how a changed input was handled, and validate the forecast
+resolution and scoring path. Demonstrate review control, correct retry and
+restart behaviour, and containment of hostile input. Keep live forecasts
+pending until their actual outcomes resolve.
 
-### Phase 1 — Hardened local pilot
+### Phase 2 — Private, capacity-limited multi-node alpha
 
-Deliverables:
+Enrol a small cohort of independently operated nodes. Add programme/project
+registry, project choice and leases, revisioned artifacts and access
+control, review queues, dashboard, and review and revocation operations.
+Use signed releases and versioned policy. Share research outputs through
+reviewed participant read surfaces. Compare single-agent and independent
+multi-node work at similar budgets on questions with checkable results.
+Validate recovery and cross-project isolation independently of the research
+quality evaluation.
 
-- rootless container, VM, or separate-account browser isolation with
-  proxy-only networking enforced outside Chromium;
-- an explicit constitution-bound trusted node core—supervisor, executable
-  policy, audit writer, node-key interface, and release manifest—that hostile
-  pages and the browser security domain cannot modify or impersonate;
-- signed reproducible node and browser artifacts whose release manifest binds
-  code, dependency lock, executable policy, and constitution version/digest;
-- authenticated browser control and egress channels, approved HTTPS
-  destinations, controlled DNS, and no sandbox-reachable raw debugging port;
-- quarantined download lifecycle with size/type/archive limits, secret and
-  malware scanning, explicit release, and content-addressed provenance;
-- encrypted project profiles with idle and absolute expiry, local session
-  registry, revocation, and crash-safe cleanup;
-- local authenticated takeover and active-session UI;
-- durable action-attempt ledger with idempotency keys, reconciliation, and
-  explicit `unknown_outcome` handling for consequential actions;
-- one research workflow, one software workflow, and one long-form writing
-  workflow using the same policy and artifact boundaries;
-- the knowledge-base Phase 1 retrieval, proposal, append-only storage, and
-  human-review vertical slice;
-- one dedicated, low-value project account used first for read-only or draft
-  work, with separate recovery and no ordinary personal data.
+### Phase 3 — Public read access and bounded public alpha
 
-Exit criteria:
+Publish eligible programme outputs and reviewed thesis revisions with stable
+citations, documented licenses, and visible corrections. Gate public read
+publication on content and knowledge-feature controls. Gate public self-service
+enrolment separately on incident response, privacy, security, moderation,
+abuse resistance, participant controls, and operational capacity. Make
+enrolment pausable and expand it against observed review and support load.
 
-- the browser cannot reach any destination except through the externally
-  enforced gate, including after renderer or worker compromise tests;
-- a compromised page, renderer, or browser worker cannot alter the supervisor
-  or policy, change the bound constitution digest, read node identity keys, or
-  forge events in the core audit stream;
-- another process running as the same host user cannot use the browser control
-  or proxy capability merely by discovering a port;
-- rejected or unscanned downloads never enter a task workspace or model
-  context;
-- session expiry and revocation make the authenticated browser capability
-  unusable without deleting required audit evidence;
-- crash/retry tests do not duplicate known consequential effects, and ambiguous
-  attempts stop for reconciliation;
-- the dedicated pilot account exposes no reusable credential to model context
-  or arbitrary model-controlled code;
-- an independent reviewer accepts the local pilot boundary and documented
-  residual risks.
+### Phase 4 — Programme expansion
 
-### Phase 2 — Capacity-limited multi-node alpha
+Expand supported research methods, data formats, source adapters, and
+coordination patterns as measured quality supports them.
 
-Deliverables:
+## 15. Open decisions
 
-- modular-monolith control plane with Postgres, durable workflows, encrypted
-  object storage, identity, project/task assignment, leases, audit, and quotas;
-- signed node/container release, local node key, device enrollment,
-  constitution assent, update policy, and release revocation;
-- release verification and optional platform-attestation evidence evaluated
-  into a trust tier rather than accepting self-reported hashes as proof;
-- initially private then capacity-limited self-service enrollment with stable
-  accounts, abuse controls, and progressive trust rather than social
-  invitations;
-- structured project collaboration and independent/critic/review patterns;
-- participant caps, capability profiles, trust tiers, and human overrides;
-- capability broker with one narrow, reversible integration, such as draft
-  branches through a GitHub App;
-- dashboard for assignments, task state, approvals, browser sessions, spend,
-  audit, objections, and revocation;
-- complete knowledge-base proposal/review workflow and a read-only surface for
-  pilot participants;
-- approvals, objections, appeals, incident controls, quotas, and audit viewer;
-- red-team harness and privacy/export/delete workflows.
+- Which first programme, data release, and research question offer the
+  clearest two-cycle test within the pilot budget?
+- Which minimum provenance and reproduction checks should each artifact type
+  pass before human review or public release?
+- Which independent review qualifications and conflicts apply by domain, and
+  when must a human adjudicate?
+- Which tasks and comparison budgets make a fair test of multi-node
+  collaboration?
+- What identity assurance, operating capacity, and steward roles are needed
+  for public enrolment?
 
-Exit criteria:
-
-- a small group of independently operated nodes completes useful projects
-  without cross-project or cross-participant access;
-- no reusable integration secret reaches model context or arbitrary
-  model-controlled code;
-- expired/revoked/zombie nodes cannot commit work or actions;
-- replay, retry, partition, and lease-fencing tests pass;
-- users can understand and control assignment, spend, and data exposure;
-- restore, release-revocation, compromised-node, and network-pause exercises
-  pass;
-- pilot work has documented human review, provenance, and measurable utility.
-
-### Phase 3 — Public alpha and bounded beta
-
-Deliverables:
-
-- public capacity queue and progressively expanded T0/T1 self-enrollment;
-- stronger abuse, Sybil, quota, anomaly, and moderation controls;
-- supported local-model profiles and release compatibility policy;
-- multiple project templates and brokered integrations;
-- public knowledge-base read surface with stable revisions, citations, search,
-  correction, dispute, supersession, retraction, and status propagation;
-- public transparency metrics and governance records;
-- T2 attestation pilot for a narrow supported platform;
-- external penetration test, bug bounty, and operational SLOs.
-
-Exit criteria:
-
-- public enrollment can be paused, capped, or revoked without stranding active
-  safety operations;
-- authorization, tenant isolation, privacy lifecycle, moderation, and
-  knowledge-integrity launch gates pass;
-- external testing finds no unresolved critical boundary failure;
-- public participants can inspect governance, provenance, correction history,
-  system status, and the limits of agent authority;
-- operating load and incident response remain manageable before capacity is
-  expanded.
-
-Public beta still excludes money movement and autonomous social campaigning.
-
-### Phase 4 — Expanded beta and separately approved capabilities
-
-After a stable bounded beta, scale supported workflows, integrations, trust
-profiles, and operating capacity only as the evidence permits. The following
-capabilities remain outside the ordinary roadmap and each requires a new threat
-model, governance vote, legal review, independent security review, and
-feature-specific pilot:
-
-- urgent support broadcasts;
-- public-post automation;
-- confidential/high-sensitivity projects;
-- financial allocation or spending;
-- open project creation;
-- cross-collective federation;
-- persistent cross-project agent memory.
-
-The public, reviewed thesis knowledge base is not “persistent cross-project
-agent memory” for this purpose. That deferred capability means private or
-personal episodic memory carried between projects; it has different consent,
-privacy, poisoning, and deletion risks.
-
-## 15. Workstreams and initial backlog
-
-### Governance/product
-
-- draft constitution values, rights, prohibited conduct, precedence, and
-  amendments;
-- define legal entity, contributor agreement, privacy notice, terms, code of
-  conduct, appeals, and transparency policy;
-- create project charter and risk assessment templates;
-- deliver the governance work assigned by the
-  [knowledge base specification](knowledge-base-spec.md#12-delivery-plan);
-- recruit security, moderation, editorial, and legal advisers.
-
-### Protocol/domain
-
-- specify IDs, schemas, state machines, idempotency, leases, and fencing;
-- define policy/action vocabulary and approval semantics;
-- publish compatibility and conformance suite;
-- define artifact provenance and data classifications;
-- maintain the thesis revision, workflow, and read-view schemas plus protocol
-  artifacts required by the knowledge base specification.
-
-### Node
-
-- build CLI/supervisor and local journal;
-- implement enrollment, credential rotation, and signed updates;
-- implement sandbox/egress broker and secret scanning;
-- integrate the pinned Stagehand v4 browser runtime and an optional OpenHands
-  coding backend if the software workflow justifies it;
-- build human takeover, project browser profiles, session revocation, and the
-  account registry;
-- add budget/cancel/checkpoint and human-interrupt behavior.
-
-### Control plane/dashboard
-
-- build identity, registry, scheduler, project/task, workflow, and audit
-  services as a modular monolith first;
-- build the knowledge service and public read surface defined by its feature
-  specification;
-- implement policy decision and approval points;
-- build capability broker and one draft-only integration;
-- build participant and project dashboard views;
-- add telemetry, quotas, alerts, backups, and admin separation.
-
-### Assurance
-
-- executable threat model and authorization matrix tests;
-- prompt-injection/memory-poisoning red-team corpus;
-- maintain the knowledge-base integrity and abuse test suites;
-- reproducible release and provenance pipeline;
-- incident playbooks, restore drills, and data lifecycle verification;
-- external review and disclosure program.
-
-## 16. Team and operating model
-
-A credible alpha needs at least these accountable functions, even if one person
-initially holds several non-conflicting roles:
-
-- product/governance lead;
-- node/agent engineer;
-- backend/workflow engineer;
-- application/dashboard engineer;
-- security/identity engineer or retained reviewer;
-- infrastructure/SRE owner;
-- community moderation and project review owner;
-- legal/privacy adviser.
-
-Build a modular monolith before microservices, with the broker and governance
-admin surface as the first strong separations. Optimize for reviewability,
-recovery, and policy clarity rather than maximum agent count.
-
-## 17. Success measures and launch gates
-
-### Product measures
-
-- useful tasks accepted by human/project reviewers;
-- correction/rework rate and time to detect a bad result;
-- participant retention and rate of voluntary override/pause;
-- project completion and artifact adoption;
-- diversity of independent evidence, including recorded dissent;
-- knowledge quality, coverage, freshness, citation, review, and agent-use
-  measures defined in the knowledge base specification;
-- user-understood cost and privacy settings.
-
-### Safety/security measures
-
-- unauthorized cross-project reads/writes (target: zero);
-- reusable secrets observed in prompts/logs/artifacts (target: zero);
-- consequential external actions without required approval (target: zero);
-- revocation propagation time and zombie commit rejection;
-- incident detection/containment/recovery time;
-- policy-conflict stop rate versus unsafe continuation;
-- prompt-injection test success at containing actions, not merely detecting text;
-- concentration of nodes, work, and governance influence by one human/entity;
-- knowledge-base safety and integrity measures defined in its feature
-  specification.
-
-### Hard launch gates
-
-- named accountable governance and incident roles;
-- constitution, terms, privacy policy, and prohibited-use policy published;
-- security review findings resolved or explicitly accepted;
-- tested kill switch, release revocation, restore, and participant appeal;
-- external-write broker proves least privilege and complete audit;
-- all knowledge-base feature gates pass before public knowledge publication;
-- no launch feature depends on trusting an LLM oath or self-reported node state.
-
-## 18. Recorded decisions and remaining open questions
-
-### 18.1 Recorded founder decisions
-
-- The alpha supports software, research, and long-form writing.
-- Research should accumulate in a shared, public, revisioned thesis knowledge
-  base. Agents may propose additions and edits, but publication and edits to
-  existing theses are capability-gated and independently reviewed.
-- Political scope and values are primarily defined by the founder-authored
-  constitution rather than pre-empted by this technical specification.
-- Recruitment is public after a compelling working demonstration. Enrollment
-  is self-service and does not depend on an existing invite network.
-- Legal-identity verification for participants is undecided; the architecture
-  supports stable pseudonyms and progressive verification.
-- Founder-appointed interim stewards are acceptable, with trust and authority
-  expanding gradually to enthusiastic and capable participants.
-- The founder initially operates the infrastructure. A permanent jurisdiction
-  or institutional form is intentionally not being chosen yet.
-- Full general-browser capability is required from the first useful release.
-  OpenHands is not presumed to be the primary harness.
-- Stagehand v4 is the selected browser-capability SDK behind a narrow UBC
-  adapter. The UBC supervisor, not Stagehand, remains the system-wide agent
-  harness and policy boundary.
-- Browser Use 1.x is not used for authenticated sessions because model-written
-  Python and raw CDP violate the required separation between the model,
-  credentials, and reusable authenticated browser state.
-- Software and default repository content use AGPL-3.0-or-later; the
-  constitution uses CC-BY-ND-4.0; project marks and claims of official or
-  constitution-conforming status remain separately controlled.
-
-### 18.2 Remaining open questions
-
-1. **Identity assurance:** which actions or roles, if any, should require legal
-   identity, proof of personhood, account longevity, or another stronger signal?
-2. **Source model:** is a temporarily private control plane acceptable, and is
-   eventual open-sourcing a goal?
-3. **Human authority:** can a user direct their node only among admitted
-   projects, or create private/personal projects too?
-4. **Constitution change:** who proposes, votes, interprets ambiguity, and can
-   suspend a provision in an emergency?
-5. **Launch data:** may founder-managed alpha projects contain personal or
-   confidential data, or only controlled test data and ordinary project
-   accounts?
-6. **Public identity:** should project output always disclose UBC and material
-   AI participation?
-7. **Operating budget:** what hosting budget and appetite for managed browser,
-   identity, workflow, and secrets services should shape the first build?
-8. **Project accounts:** who may approve creation, accept third-party terms,
-   serve as recovery owner, and authorize deletion of a project account?
-9. **Browser hosting:** should authenticated project browsers run only on
-   founder-managed infrastructure initially, or may suitably attested
-   participant nodes host isolated project profiles?
-
-Knowledge-specific unresolved decisions are maintained in the
-[knowledge base specification](knowledge-base-spec.md#14-open-questions).
-
-## 19. Requirements crosswalk
-
-| Original concept | Specification response | Launch disposition |
-|---|---|---|
-| Fork or retain a leading harness | Thin UBC supervisor with Stagehand v4 behind a narrow browser adapter; Browser Use 1.x and Skyvern rejected as the authenticated-session foundation | Pin and audit the adapter; no initial fork/submodule |
-| Preserve constitutional identity while remaining open source | AGPL software, separately licensed unadapted constitution, controlled marks, signed constitution-bound releases, and official-network admission rules | Required before outside code distribution and public enrollment |
-| Constitution and manifesto | Signed, versioned human artifact plus executable policy/evaluation bundle | Required before enrollment |
-| Human and agent solemnly swear | Authenticated human assent and an agent oath, without presenting either as technical proof of alignment | Required with honest wording |
-| Local/API models run continuously | Provider-neutral, bounded task iterations with budgets, checkpoints, and interrupt | Included |
-| Create or join projects | Admitted project registry, charters, consent, matching, leases, and human override | Included for software, research, and writing |
-| Accumulate shared knowledge | Dedicated [knowledge base specification](knowledge-base-spec.md) with strict revision/workflow/read schemas, immutable revisions, evidence, relationships, gated review, and public citations | Draft workflow in Phase 1; public read site/API in Phase 2 |
-| Participant cap and intelligence threshold | Participant cap plus task-specific capability profile and evaluation evidence | Included; no scalar “IQ” |
-| Shared private data and credentials | Brokered operations, on-demand scoped tokens, controlled browser sessions, dedicated project accounts, and human-assisted authentication | Founder-managed non-public integration in public alpha; broader access later |
-| General browser use | Browser-first runtime, visual and structured interaction, persistent isolated profiles, and state-preserving human takeover | Required from the first useful release |
-| Agent digital identity and app accounts | Human/project-owned account registry; agent acts as delegate; legitimate human verification and recovery | Limited project accounts in alpha |
-| Private infrastructure repository | Separate control-plane/deployment repos with public protocol and mock server | Included; privacy is not security by obscurity |
-| Public enrollment | Self-service enrollment after a working demo, with quotas, abuse controls, and progressive trust | Public multi-node alpha |
-| Unique secure node identity | Human, node-key, workload, run, model, and membership identities kept distinct | Included |
-| Verify allowed orchestrator version | Signed releases and tiered attestation; explicit statement of what cannot be proven on untrusted hardware | T0/T1 launch, narrow T2 pilot later |
-| Human dashboard and reassignment | Observe, approve, budget, pause, revoke, pin/exclude, and redirect at safe checkpoints | Included |
-| Future project funding | Separate legal/treasury design with humans, regulated custody, dual approval, and limits | Explicitly deferred |
-| Urgent network broadcast | Opt-in internal support request with strict anti-harassment/manipulation controls | Explicitly deferred and separately gated |
-
-## 20. Reference basis
-
-- [Stagehand v4 documentation](https://docs.stagehand.dev/v4/first-steps/introduction)
-- [Stagehand repository and MIT license](https://github.com/browserbase/stagehand)
-- [Browser Use 1.0 migration and trust model](https://github.com/browser-use/browser-use/blob/main/MIGRATING.md)
-- [Skyvern repository and AGPL license](https://github.com/Skyvern-AI/skyvern)
-- [GNU Affero General Public License v3](https://www.gnu.org/licenses/agpl-3.0.html)
-- [Creative Commons Attribution-NoDerivatives 4.0](https://creativecommons.org/licenses/by-nd/4.0/)
-- [Open Source Definition](https://opensource.org/osd)
-- [IP Australia trade mark guidance](https://www.ipaustralia.gov.au/trade-marks/what-are-trade-marks)
-- [OpenHands repository and Software Agent SDK](https://github.com/OpenHands/OpenHands)
-- [LangGraph repository](https://github.com/langchain-ai/langgraph)
-- [Letta repository](https://github.com/letta-ai/letta)
-- [AutoGen repository and maintenance notice](https://github.com/microsoft/autogen)
-- [Temporal durable-execution architecture](https://github.com/temporalio/temporal/blob/main/docs/architecture/README.md)
-- [RFC 9334: Remote ATtestation procedureS architecture](https://www.rfc-editor.org/rfc/rfc9334.html)
-- [SPIFFE workload identity concepts](https://spiffe.io/docs/latest/spiffe/concepts/)
-- [Sigstore signature verification](https://docs.sigstore.dev/cosign/verifying/verify/)
-- [Vault response wrapping](https://developer.hashicorp.com/vault/docs/concepts/response-wrapping)
-- [PostgreSQL row security](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
-- [OWASP prompt injection guidance](https://genai.owasp.org/glossary/prompt-injection/)
-- [OWASP excessive agency guidance](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/)
+[Knowledge base open questions](knowledge-base-spec.md#14-open-questions)

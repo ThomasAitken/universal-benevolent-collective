@@ -1,11 +1,12 @@
 # Single-node prototype reference
 
-The repository currently implements a bounded, local runtime for one
-human-supervised agent and a repeatable research demonstration. It is a
-security-oriented prototype of the node described in the
-[product and architecture specification](product-and-architecture-spec.md), not
-an implementation of the proposed multi-node network, control plane, account
-registry, or shared knowledge system.
+The repository implements a bounded local runtime for one human-supervised
+agent and a repeatable research demonstration. This reference covers the
+implemented supervisor, browser tools, policy, and audit. The next milestone
+uses these foundations to run a living research programme across two cycles,
+with versioned data, reproducible analysis, and thesis review.
+[Product and architecture specification](product-and-architecture-spec.md) ·
+[Single-node research pilot roadmap](single-node-pilot-roadmap.md)
 
 The central design rule is that a model may propose work but does not receive
 direct browser authority. Budgets, policy, approval, browser execution, human
@@ -158,8 +159,6 @@ closed; the free-form action description never grants authority.
 
 Payments, account creation, public posting, and recovery changes are denied
 without an override path. Unknown internal browser operations are also denied.
-The current R0/R1/R2 vocabulary is smaller than the long-term specification's
-R0–R4 network policy.
 
 Approval and takeover are deliberately different:
 

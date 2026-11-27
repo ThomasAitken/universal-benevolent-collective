@@ -21,10 +21,10 @@ boundary.
 
 Native macOS and Windows, Docker Desktop, and the existing local in-process
 and supervised browser demos remain development fixtures. A disposable Linux
-guest running the specified stack can supply local acceptance evidence. Run
-the integrated Milestone A gate on the intended Linux pilot deployment to
-verify its authority and network configuration. Linux launch failures are
-terminal and there is no fallback to the development modes.
+guest running the specified stack can supply local acceptance evidence.
+Repeat the integrated browser and egress gates on the intended Linux pilot
+deployment before live retrieval. Linux launch failures are terminal.
+[Pilot acceptance](single-node-pilot-roadmap.md#c07--integrated-pilot-and-acceptance)
 
 ## Trusted core
 
@@ -153,6 +153,8 @@ has a 60-second deadline and a command has a 30-second deadline. Loss of the
 parent connection, worker, or broker retires the container and its tmpfs
 state. A failed command is terminal and the client never reconnects or
 replays it. Lifecycle events include the release and image digest.
+
+### Private egress gate
 
 `PodmanBrowserRuntime.launch` returns the typed `BrowserSession`. It asks for
 a subset of the operator's configured origins. The broker starts an
