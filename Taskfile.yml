@@ -67,6 +67,13 @@ tasks:
     cmds:
       - uv run pytest -m quarantine_scanner --no-cov
 
+  test-analysis-container:
+    desc: Run the C06 worker acceptance gate against the pinned Linux image
+    env:
+      UBC_RUN_ANALYSIS_CONTAINER_E2E: "1"
+    cmds:
+      - uv run pytest tests/pilot/test_analysis_runner.py::test_linux_container_analysis --no-cov
+
   build:
     desc: Build the source distribution and wheel
     cmds:

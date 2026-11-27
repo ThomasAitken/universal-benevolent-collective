@@ -4,13 +4,9 @@ import hashlib
 import os
 import socket
 import sqlite3
-import struct
 import subprocess
 import sys
-import tempfile
-from collections.abc import Generator
-from concurrent.futures import ThreadPoolExecutor
-from contextlib import closing, contextmanager
+from contextlib import closing
 from io import BytesIO
 from pathlib import Path
 from typing import cast
@@ -18,6 +14,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 
+from tests.clamd_fixture import clamd_fixture as clamd_fixture
+from tests.clamd_fixture import read_scan, scanner_for
 from ubc_node import quarantine
 from ubc_node.cli import run
 from ubc_node.quarantine import (
@@ -39,55 +37,6 @@ def _disguised_archive() -> bytes:
     with ZipFile(content, "w", compression=ZIP_DEFLATED) as archive:
         archive.writestr("repeated.txt", b"x" * (32 * 1024))
     return content.getvalue()
-
-
-def _read_scan(channel: socket.socket) -> bytes:
-    channel.settimeout(5)
-    received = bytearray()
-    with channel.makefile("rb") as stream:
-        assert stream.read(10) == b"zINSTREAM\0"
-        while True:
-            header = stream.read(4)
-            assert len(header) == 4
-            size = struct.unpack("!I", header)[0]
-            if size == 0:
-                break
-            chunk = stream.read(size)
-            assert len(chunk) == size
-            received.extend(chunk)
-    return bytes(received)
-
-
-@pytest.fixture
-def clamd() -> Generator[tuple[Path, socket.socket]]:
-    with (
-        tempfile.TemporaryDirectory(dir="/tmp", prefix="ubc-scan-") as directory,
-        socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener,
-    ):
-        endpoint = Path(directory) / "socket"
-        listener.bind(os.fspath(endpoint))
-        listener.listen()
-        listener.settimeout(5)
-        yield endpoint, listener
-
-
-@contextmanager
-def _scanner(
-    clamd: tuple[Path, socket.socket], *replies: bytes, expected: bytes = _CLEAN
-) -> Generator[ClamAVScanner]:
-    endpoint, listener = clamd
-
-    def serve() -> None:
-        channel, _ = listener.accept()
-        with channel:
-            assert _read_scan(channel) == expected
-            for reply in replies:
-                channel.sendall(reply)
-
-    with ThreadPoolExecutor() as executor:
-        serving = executor.submit(serve)
-        yield ClamAVScanner(endpoint)
-        serving.result()
 
 
 def _events(store: DownloadQuarantine) -> list[tuple[str, str | None]]:
@@ -125,9 +74,9 @@ def test_clean_release_is_scoped_deduplicated_and_audited(
     source = tmp_path / "download"
     source.write_bytes(_CLEAN)
     store = DownloadQuarantine(tmp_path / "store")
-    with _scanner(clamd, b"stream: ", b"OK\0") as scanner:
+    with scanner_for(clamd, b"stream: ", b"OK\0", expected=_CLEAN) as scanner:
         receipt = _ingest(store, source, scanner, max_bytes=len(_CLEAN))
-    with _scanner(clamd, b"stream: OK\0") as scanner:
+    with scanner_for(clamd, b"stream: OK\0", expected=_CLEAN) as scanner:
         other = _ingest(
             store,
             source,
@@ -225,7 +174,10 @@ def test_scanner_rejects_malware_and_requires_complete_clean_result(
     source = tmp_path / "download"
     source.write_bytes(_CLEAN)
     store = DownloadQuarantine(tmp_path / "store")
-    with _scanner(clamd, *replies) as scanner, pytest.raises(DownloadRejected, match=reason):
+    with (
+        scanner_for(clamd, *replies, expected=_CLEAN) as scanner,
+        pytest.raises(DownloadRejected, match=reason),
+    ):
         _ingest(store, source, scanner)
     _assert_unreleased(store, reason)
 
@@ -348,7 +300,7 @@ def test_cli_import_and_restart(
     tmp_path: Path, clamd: tuple[Path, socket.socket], capsys: pytest.CaptureFixture[str]
 ) -> None:
     args = _cli_args(tmp_path, clamd[0])
-    with _scanner(clamd, b"stream: OK\0"):
+    with scanner_for(clamd, b"stream: OK\0", expected=_CLEAN):
         assert run(args) == 0
     assert f"sha256:{hashlib.sha256(_CLEAN).hexdigest()}" in capsys.readouterr().out
     assert run(["quarantine", "--store", str(tmp_path / "store"), "recover"]) == 0
@@ -423,7 +375,7 @@ def test_killed_import_stays_private_and_repeated_recovery_is_idempotent(
         try:
             channel, _ = listener.accept()
             with channel:
-                assert _read_scan(channel) == _CLEAN
+                assert read_scan(channel) == _CLEAN
                 child.kill()
                 child.wait(timeout=5)
         finally:
@@ -459,7 +411,7 @@ def test_scanner_streams_large_csv_and_enforces_positive_deadline(
     source = tmp_path / "large.csv"
     source.write_bytes(large)
     store = DownloadQuarantine(tmp_path / "store")
-    with _scanner(clamd, b"stream: OK\0", expected=large) as scanner:
+    with scanner_for(clamd, b"stream: OK\0", expected=large) as scanner:
         release = _ingest(store, source, scanner, content=large)
     assert store.read_release(_SCOPE.project, release.receipt) == large
 
@@ -500,6 +452,6 @@ def test_stray_session_directory_does_not_block_new_attempt(
     store.root.chmod(0o700)
     source = tmp_path / "download"
     source.write_bytes(_CLEAN)
-    with _scanner(clamd, b"stream: OK\0") as scanner:
+    with scanner_for(clamd, b"stream: OK\0", expected=_CLEAN) as scanner:
         release = _ingest(store, source, scanner)
     assert store.read_release(_SCOPE.project, release.receipt) == _CLEAN

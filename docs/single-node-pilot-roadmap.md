@@ -1,6 +1,6 @@
 # Single-node research pilot roadmap
 
-- **Current focus** · C04 deployment acceptance
+- **Current focus** · C04 and C06 deployment acceptance
 - **Delivery model** · Dependency-ordered commits to `main`
 - **Updated** · 2026-11-27
 
@@ -77,7 +77,7 @@ tracker records the resulting behaviour and residual limits.
 | C03 | done | C02 | Private per-session egress gate with HTTP/HTTPS Chromium and zero-contact fixtures |
 | C04 | implemented, deployment gate pending | C03 | Operator-imported, quarantined, scanned, content-addressed pilot CSVs |
 | C05 | done | C03 | Inventory-scoped Chromium evidence with provenance and a supervisor audit |
-| C06 | queued | C01, C04 | Local research records, reproducible analysis, thesis review, and forecast resolution |
+| C06 | implemented, deployment gate pending | C01, C04 | Local research catalogue, isolated price analysis, thesis review, and forecast resolution |
 | C07 | queued | C05, C06 | Integrated two-cycle research pilot and operator acceptance |
 
 Public-page evidence and operator CSV acquisition can be accepted separately.
@@ -175,34 +175,44 @@ the intended pilot deployment before connecting to live sources.
 
 ## C06 — Research records, analysis, and review
 
-- Create a minimal local programme and project record, with human admission,
-  owner opt-in, a bounded project choice, and a queue for follow-up proposals.
-  Store immutable versions for source artifacts, dataset releases, run
-  manifests, and forecast submissions with explicit dependency references.
-- Run transforms and analysis in a disposable, network-disabled environment
-  with pinned tooling, read-only inputs, explicit outputs, and process,
-  memory, storage, and time limits. Start with reviewed fixture analysis
-  code. Gate execution of external research code on containment for untrusted
-  programs. Verify the runner has no host credentials, browser authority,
-  node keys, or core audit access.
-- Emit versioned artifacts with schema, source lineage, method, digest,
-  licensing and quality checks. Confirm that reruns can reproduce expected
-  values and that malformed input, injected content, excessive output and
-  execution failure do not yield accepted artifacts.
-- Retrieve a pinned thesis revision and submit a validated draft, revision
-  proposal, or reasoned no-change result under the v1 contracts. Provide
-  human review, a diff, and evidence locators. Record review and catalogue
-  changes durably and prevent model-only publication.
-- Store a forecast question, pre-outcome submission and baseline, resolution
-  evidence, and score. Test temporal separation, duplicate resolution,
-  unresolved outcomes, and upstream corrections. Preserve the original
-  submission and rule. Test that a fresh run can identify dependants from a
-  changed input and that stale or duplicate commits cannot corrupt accepted
-  state.
+The pilot uses a private local SQLite catalogue so releases, dependency links,
+and supervisor-format audit events can commit together. The operator admits
+charters and records owner opt-in for up to eight choices. A choice yields
+one task with a fixed project and budget. Follow-up suggestions remain in the
+programme queue until admitted. A task revocation blocks new accepted results,
+including an analysis that finishes after revocation.
 
-The local implementation can use a small catalogue, immutable files, and a
-journal. Use task-scoped state and the existing supervisor and audit contracts.
-[Thesis vertical slice](knowledge-base-spec.md#phase-1--single-node-vertical-slice)
+The analysis boundary accepts a project- and task-scoped C04 receipt and the
+charter's region and observation window. One reviewed five-minute price method
+runs in a fresh Linux container with a digest-pinned Python image, no network,
+no host mounts, a read-only root, and explicit resource limits. Its dataset
+retains exact CSV line lineage. A manifest pins source, code, tooling,
+parameters, output digest, rights through the dataset release, and quality
+checks. External research code is disabled. Use a fixed method for the pilot
+so reviewers can reproduce the result and focus on evidence and interpretation.
+
+The thesis workflow handles a pinned local revision, a new draft, a revision
+proposal, or a reasoned no-change result. Proposals use the v1 schema with
+pinned evidence locators. A human records an independent decision after
+reviewing the diff. Local approval creates an immutable revision with its
+content digest and keeps earlier revisions available. Model callers have
+proposal authority and public publication remains separately gated.
+
+A binary forecast pins the question, cutoff, deadline, named source version,
+resolution rule and Brier method. The submission records a probability and a
+constant 0.5 baseline at the same cutoff. A later named dataset can resolve it.
+A direct source correction appends a score while preserving the original
+question, submission, and resolution. A fresh process can traverse the
+old source's dependants and retrieve the exact prior artifacts.
+
+The component fixtures cover reruns, malformed and injected input, excess
+output, worker failure, stale thesis reviews, revoked work, known or premature
+forecast outcomes, duplicate resolution, and corrections. `task check`
+passed with 100% statement and branch coverage. `task test-analysis-container`
+passed against a local Linux ARM64 Docker engine with cgroup v2. Repeat the
+analysis gate and the pending C04 gate on the intended pilot deployment.
+The integrated two-cycle driver remains C07.
+[Operator API and analysis gate](c06-research-records.md)
 
 ## C07 — Integrated pilot and acceptance
 

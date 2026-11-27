@@ -116,6 +116,7 @@ class EventKind(StrEnum):
     HANDOFF_REQUESTED = "handoff_requested"
     HANDOFF_COMPLETED = "handoff_completed"
     RUN_FINISHED = "run_finished"
+    RESEARCH_RECORDED = "research_recorded"
 
 
 @dataclass(frozen=True, slots=True)
