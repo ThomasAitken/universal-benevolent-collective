@@ -32,7 +32,7 @@ from ubc_node.browser.supervised_browser import (
     read_worker_frame,
     write_worker_frame,
 )
-from ubc_node.core.contracts import ActionProposal
+from ubc_node.core.contracts import ActionProposal, JsonValue
 from ubc_node.release.release_manifest import create_release_manifest, write_release_manifest
 
 ROOT = Path(__file__).parents[1]
@@ -492,12 +492,15 @@ async def test_broker_startup_accepts_only_session_metadata() -> None:
     reader = asyncio.StreamReader()
     reader.feed_data(broker._frame(INIT))
     assert await broker._startup(reader) == INIT
+    offline = {**INIT, "origins": []}
+    reader.feed_data(broker._frame(offline))
+    assert await broker._startup(reader) == offline
 
     for message in (
         {**INIT, "network": "host"},
         {**INIT, "version": True},
         {**INIT, "session_id": "../another-worker"},
-        {**INIT, "origins": []},
+        {**INIT, "origins": [FIXTURE_ORIGIN] * 33},
         {**INIT, "origins": ["x" * 271]},
     ):
         reader.feed_data(broker._frame(message))
@@ -560,6 +563,9 @@ def test_broker_validation_and_podman_command(monkeypatch: pytest.MonkeyPatch) -
     ):
         assert flag in command
     assert command[-3:] == ("--", image, "7")
+    offline = broker.podman_command("ubc-browser-test", image, 7, cgroup, None)
+    assert "--network=none" in offline
+    assert all(not flag.startswith("--volume=") for flag in offline)
 
     monkeypatch.setenv("INVOCATION_ID", invocation_id)
     for argv in (["broker.py"], ["broker.py", "unknown"], ["broker.py", "run", "extra"]):
@@ -649,3 +655,71 @@ async def test_malformed_navigation_status_revokes_the_typed_session(
         with pytest.raises(BrowserWorkerError, match="http_status"):
             await inspection
         assert session.state is BrowserSessionState.REVOKED
+
+
+SNAPSHOT: dict[str, JsonValue] = {
+    "title": "Evidence",
+    "text": "Rendered",
+    "links": [],
+    "text_truncated": False,
+    "links_truncated": False,
+}
+
+
+async def test_start_and_render_one_offline_snapshot(
+    runtime: PodmanBrowserRuntime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(IsolatedBrowserError, match="invalid snapshot session ID"):
+        await runtime.launch_snapshot("invalid/path")
+    async with _channel() as (client_reader, client_writer, worker_reader, worker_writer):
+        _mock_connection(monkeypatch, client_reader, client_writer)
+        await write_worker_frame(worker_writer, BROKER)
+        renderer = AsyncMock(return_value=SNAPSHOT)
+        monkeypatch.setattr(isolated_worker, "render_chromium", renderer)
+        monkeypatch.setattr(isolated_worker, "_proxy", Mock(side_effect=AssertionError("no proxy")))
+        worker = asyncio.create_task(isolated_worker._serve(worker_reader, worker_writer))
+        session = await runtime.launch_snapshot("snapshot")
+        with pytest.raises(BrowserWorkerError, match="disabled"):
+            await session.open_url(FIXTURE_ORIGIN)
+        snapshot = await session.render_snapshot(
+            b"<h1>Evidence</h1>", plain_text=False, encoding="utf-8-sig", link_query="Report"
+        )
+        await worker
+        assert snapshot.text == "Rendered"
+        assert "<h1>Evidence</h1>" in renderer.call_args.args[0].html
+        assert renderer.call_args.args[0].link_query == "Report"
+        assert session.state is BrowserSessionState.CLOSED
+        assert (await runtime.next_event()).kind == "isolated_browser_started"
+        assert (await runtime.next_event()).payload["reason"] == "snapshot rendered"
+        await session.close()
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {"version": True},
+        {"version": 2},
+        {"request_id": True},
+        {"request_id": 2},
+        {"operation": "open"},
+        {"parameters": None},
+    ],
+)
+async def test_offline_worker_rejects_other_commands(invalid: Mapping[str, object]) -> None:
+    async with _channel() as (client_reader, client_writer, worker_reader, worker_writer):
+        worker = asyncio.create_task(isolated_worker._serve(worker_reader, worker_writer))
+        await write_worker_frame(client_writer, {**INIT, "origins": []})
+        assert await read_worker_frame(client_reader) == READY
+        await write_worker_frame(
+            client_writer,
+            {
+                "version": 1,
+                "request_id": 1,
+                "operation": "render_snapshot",
+                "parameters": {},
+                **invalid,
+            },
+        )
+        with pytest.raises(BrowserWorkerError, match="invalid snapshot request"):
+            await worker
+        assert await client_reader.read() == b""

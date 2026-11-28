@@ -1,6 +1,7 @@
 """Trusted client for the Linux browser boundary."""
 
 import asyncio
+import re
 import socket
 import struct
 import sys
@@ -15,6 +16,7 @@ from ubc_node.browser.isolation.isolation_contracts import (
     IsolatedBrowserLaunchSpec,
     RuntimeLimits,
 )
+from ubc_node.browser.isolation.snapshot import SnapshotContent, encode_snapshot, parse_snapshot
 from ubc_node.browser.stagehand_browser import BrowserSessionError, NavigationPolicyError
 from ubc_node.browser.supervised_browser import (
     WORKER_PROTOCOL_VERSION,
@@ -42,6 +44,7 @@ ISOLATED_OPERATIONS = frozenset(
         "revoke",
     }
 )
+_SNAPSHOT_OPERATIONS = frozenset({"render_snapshot"})
 _DEFAULT_SOCKET = Path("/run/ubc-browser/control.sock")
 _START_TIMEOUT = 60
 _COMMAND_TIMEOUT = 30
@@ -84,8 +87,6 @@ class PodmanBrowserRuntime:
         return self._digest
 
     async def launch(self, spec: IsolatedBrowserLaunchSpec) -> "IsolatedBrowserSession":
-        if sys.platform != "linux":
-            raise IsolatedBrowserError("the isolated browser requires a Linux Podman host")
         if spec.browser_image_digest != self._digest:
             raise IsolatedBrowserError("browser image digest differs from the verified release")
         if spec.limits != RuntimeLimits():
@@ -96,6 +97,17 @@ class PodmanBrowserRuntime:
         ):
             raise IsolatedBrowserError("unsupported browser channel version")
 
+        return await self._launch(spec.session_id, sorted(spec.allowed_origins))
+
+    async def launch_snapshot(self, session_id: str) -> "IsolatedBrowserSession":
+        """Launch a single-snapshot worker with no egress endpoint."""
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", session_id):
+            raise IsolatedBrowserError("invalid snapshot session ID")
+        return await self._launch(session_id, [])
+
+    async def _launch(self, session_id: str, origins: list[str]) -> "IsolatedBrowserSession":
+        if sys.platform != "linux":
+            raise IsolatedBrowserError("the isolated browser requires a Linux Podman host")
         writer: asyncio.StreamWriter | None = None
         try:
             async with asyncio.timeout(_START_TIMEOUT):
@@ -118,8 +130,8 @@ class PodmanBrowserRuntime:
                     writer,
                     {
                         "version": WORKER_PROTOCOL_VERSION,
-                        "session_id": spec.session_id,
-                        "origins": sorted(spec.allowed_origins),
+                        "session_id": session_id,
+                        "origins": origins,
                     },
                 )
                 ready = await read_worker_frame(reader)
@@ -137,9 +149,12 @@ class PodmanBrowserRuntime:
                 raise IsolatedBrowserError("isolated browser startup failed") from error
             raise
 
-        self._record(spec.session_id, "isolated_browser_started", "ready")
+        self._record(session_id, "isolated_browser_started", "ready")
         return IsolatedBrowserSession(
-            reader, writer, lambda kind, reason: self._record(spec.session_id, kind, reason)
+            reader,
+            writer,
+            lambda kind, reason: self._record(session_id, kind, reason),
+            operations=ISOLATED_OPERATIONS if origins else _SNAPSHOT_OPERATIONS,
         )
 
     async def next_event(self) -> BoundaryEvent:
@@ -171,9 +186,12 @@ class IsolatedBrowserSession(BrowserWorkerClient):
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
         record: Callable[[str, str], None],
+        *,
+        operations: frozenset[str],
     ) -> None:
         self._writer = writer
         self._record = record
+        self._operations = operations
         self._state = BrowserSessionState.ACTIVE
         self._lock = asyncio.Lock()
         self._request_id = 0
@@ -185,6 +203,20 @@ class IsolatedBrowserSession(BrowserWorkerClient):
     def state(self) -> BrowserSessionState:
         return self._state
 
+    async def render_snapshot(
+        self, body: bytes, *, plain_text: bool, encoding: str, link_query: str = ""
+    ) -> SnapshotContent:
+        parameters = encode_snapshot(
+            body, plain_text=plain_text, encoding=encoding, link_query=link_query
+        )
+        try:
+            result = await self._call("render_snapshot", parse_snapshot, parameters)
+            self._finish(BrowserSessionState.CLOSED, "snapshot rendered")
+            return result
+        finally:
+            if self._writer.is_closing():
+                await self._listener
+
     async def pause(self) -> None:
         await self._request("pause")
 
@@ -192,6 +224,9 @@ class IsolatedBrowserSession(BrowserWorkerClient):
         await self._request("resume")
 
     async def close(self) -> None:
+        if "close" not in self._operations:
+            await self.revoke()
+            return
         try:
             if not self._writer.is_closing():
                 await self._request("close")
@@ -219,7 +254,7 @@ class IsolatedBrowserSession(BrowserWorkerClient):
         async with self._lock:
             if self._writer.is_closing():
                 raise IsolatedBrowserError("isolated browser session ended")
-            if operation not in ISOLATED_OPERATIONS:
+            if operation not in self._operations:
                 raise BrowserWorkerError("operation is disabled in the isolated browser")
             self._request_id += 1
             self._operation = operation
@@ -311,7 +346,10 @@ class IsolatedBrowserSession(BrowserWorkerClient):
         if self._state in {BrowserSessionState.CLOSED, BrowserSessionState.REVOKED}:
             return
         self._state = state
-        self._writer.close()
+        if state is BrowserSessionState.REVOKED:
+            self._writer.transport.abort()
+        else:
+            self._writer.close()
         if self._pending is not None and not self._pending.done():
             self._pending.set_result(IsolatedBrowserError("isolated browser session ended"))
         self._record("isolated_browser_ended", reason)

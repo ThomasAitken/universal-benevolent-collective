@@ -1,7 +1,7 @@
 {
   "browser_image": {
-    "build_context_sha256": "sha256:36c09ffebfb23b2c3abc2a856c1101b53d95e6c9529e2043ac0795e0c2142e2f",
-    "digest": "sha256:977e3a138a18ec3ec0e45b7b945d67c5bef609b50a52c922fc737a9800fdb755",
+    "build_context_sha256": "sha256:d55b713501fc4a3932c37b9aece407aefc2ace233cf73ed2276022bde3cc8546",
+    "digest": "sha256:3ead209538700930dc6b7471d7173464bfddeeb70c90970adc9a195bada43a9f",
     "reference": "localhost/ubc-browser"
   },
   "constitution": {
@@ -17,13 +17,18 @@
     "backend": "linux-rootful-podman-service",
     "contract_version": 2
   },
-  "release_id": "0.1.0-linux-public-web",
+  "release_id": "0.1.0-linux-page-snapshots",
   "schema_version": 1,
   "trusted_core": {
     "audit_writer": {
       "entrypoint": "ubc_node.core.event_log:JsonlEventLog",
       "path": "src/ubc_node/core/event_log.py",
       "sha256": "sha256:dad3c045f9918a85bb4841cfd3ac688b68c20fab3ca637aa43d03f96a9f60eff"
+    },
+    "browser_launcher": {
+      "entrypoint": "broker:main",
+      "path": "browser-runtime/broker.py",
+      "sha256": "sha256:ab4e6659ab2edba4d9d120195cf126059fb96c7ac1e5b30707f420029d677198"
     },
     "download_quarantine": {
       "entrypoint": "ubc_node.artifacts.quarantine:DownloadQuarantine",
@@ -43,7 +48,7 @@
     "public_web_fetch": {
       "entrypoint": "ubc_node.research.public_web:PublicWebFetcher",
       "path": "src/ubc_node/research/public_web.py",
-      "sha256": "sha256:3c4c708df7be02fdca5ff114dad02759d7a17de2f940fb2ce4a445ec08c7b045"
+      "sha256": "sha256:9b54452b05a9271cbb9e3b7660d5c26f08a28eff2a11e2eb634c256380813fa2"
     },
     "supervisor": {
       "entrypoint": "ubc_node.core.supervisor:RunSupervisor",

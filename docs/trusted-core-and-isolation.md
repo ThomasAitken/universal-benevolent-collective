@@ -4,8 +4,9 @@
 
 The isolated browser requires Linux with cgroup v2, systemd 254 or later,
 local Podman 5.4 or later, and crun. A root-owned systemd socket starts one
-broker, one browser container, and one egress gate container per connection. Only the broker uses
-rootful Podman. The worker and Chromium run as UID/GID 65532 (`ubc-browser`)
+broker and one browser container per connection. Sessions with approved
+navigation origins also receive a separate egress gate container. Only the
+broker uses rootful Podman. The worker and Chromium run as UID/GID 65532 (`ubc-browser`)
 inside a private user namespace mapped to subordinate host IDs. This uses the
 backend recorded in the C01 manifest while keeping runtime storage and engine
 authority outside the ordinary node account.
@@ -35,6 +36,7 @@ The trusted core consists of:
 - the core audit writer;
 - the pilot quarantine and artifact release service;
 - the mediated public-web fetch and search transport;
+- the root-owned browser launcher;
 - the signing-only node-key interface;
 - the constitution version and content digest;
 - the dependency lock; and
@@ -81,7 +83,8 @@ uv run ubc release-manifest \
 
 Reserve non-overlapping subordinate ranges in `/etc/subuid` and `/etc/subgid`
 for Podman's rootful `containers` allocator. The socket permits four concurrent
-connections and each uses two separate 65,536-slot UID/GID ranges. Confirm the local image
+connections. Each browser and egress gate uses a separate 65,536-slot UID/GID
+range. Confirm the local image
 resolves by digest with `sudo podman image inspect localhost/ubc-browser@sha256:…`.
 [Podman run reference](https://docs.podman.io/en/v5.4.2/markdown/podman-run.1.html)
 
@@ -220,11 +223,15 @@ UBC_ISOLATION_MANIFEST=.ubc/c03-fixture-manifest.json task test-browser-isolatio
 ```
 
 The ordinary run covers real Chromium HTTP/HTTPS navigation, the renderer
-fixture, redirects, session separation, and proxy endpoint permissions. The
-operator run also checks the denied counter, exercises direct TCP and UDP
-attempts and disallowed proxy requests from the browser namespace, and
-terminates the parent, worker, runtime, broker, and gate separately. Both
-containers must be removed after termination. Discard the fixture host, or
+fixture, redirects, session separation, proxy endpoint permissions, and
+offline snapshot rendering. The operator run also verifies that the offline
+worker has no egress mount or gate, checks that snapshot subresources leave
+the denied contact counter untouched, and confirms that stop removes a
+worker with a render request in flight. The navigation gate exercises
+direct TCP and UDP attempts and disallowed proxy requests from the browser
+namespace, then terminates the parent, worker, runtime, broker, and gate
+separately. Both navigation containers must be removed after termination.
+Discard the fixture host, or
 stop the launcher and remove the two fixture containers, fixture network,
 configuration and derived image before reusing it.
 
@@ -248,8 +255,7 @@ accepts `identity`, `gzip` and `deflate` encodings, bounding both wire and
 decompressed bytes to the body limit and rejecting unsupported or corrupt
 encodings. Successful reads return the normalized request and effective URLs,
 redirect history, HTTP status, content type, UTC retrieval time and bounded
-bytes. The bytes are untrusted input for the later sanitisation and quarantine
-paths. The existing Chromium egress policy continues to apply independently.
+bytes. The bytes are untrusted input to snapshot rendering and quarantine.
 
 The separate `SearchProvider` interface has an exact-query `FixtureSearch`
 for offline runs alongside live `BraveSearch` and `SerperSearch` adapters.
@@ -262,6 +268,52 @@ ten seconds and 512 KiB and returns up to 20 bounded hits. Hit URLs are
 candidates and must pass the fetcher's address checks when opened.
 [Brave Search API reference](https://api-dashboard.search.brave.com/api-reference/web/search/get) ·
 [Serper API](https://serper.dev/)
+
+## Offline page snapshots
+
+The trusted node calls `PageReader(fetcher, runtime).read(url)` to acquire and
+render a public page. The reader accepts HTML, XHTML, and plain text up to
+512 KiB. Successful page responses get a fresh Chromium container with no
+IP network access or egress socket. The launcher selects this mode when the
+startup frame has an empty origin list. The worker accepts one snapshot
+command and rebuilds the document from a static HTML allowlist. The generated
+document's Content Security Policy blocks scripts and subresources. Chromium provides the title,
+visible text and inert link labels, with a 32,000-character text limit and a
+48-link limit. Links resolve against the mediator's final URL and are
+candidates for a separate checked fetch. Pages that depend on site scripts
+may yield sparse snapshots. Use `read(url, link_query="202610")` to match a
+case-insensitive substring in link text or the original target before
+applying the 48-link limit. The snapshot records the query, and
+`links_truncated` refers to the matching links.
+
+A non-2xx status or Cloudflare's `cf-mitigated: challenge` header produces a
+`PageHTTPError` with retrieval metadata before Chromium starts. The error
+indicates whether the challenge header was present. Discovery can record the
+access failure and look for a documented public data endpoint or another
+source. Other interstitials can still arrive as successful HTML responses and
+should be assessed as part of source review.
+[Cloudflare challenge response detection](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)
+
+A live, interactive Chromium session can sometimes complete a challenge
+because it can make follow-up requests, execute verification scripts, store
+a clearance cookie, and accept human input when prompted. The snapshot worker
+receives only the fetcher's response. If that response is a challenge, the
+requested page content never reaches the renderer. A live-browser fallback
+would be a separate capability with authority to run publisher code, retain
+browser state, and make requests beyond the mediator's anonymous GET and
+HEAD. An automated browser could still be challenged. For the NEM demo,
+AEMO publishes the relevant price and demand data separately on NEMWeb.
+[Cloudflare interstitial challenges](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/) ·
+[AEMO price and demand data](https://www.aemo.com.au/energy-systems/electricity/national-electricity-market-nem/data-nem/aggregated-data)
+
+The result includes requested and effective URLs, redirect history, status,
+content type, retrieval time, and the byte count and SHA-256 of the
+mediator's decompressed response body. Keep the returned text and links
+tagged as untrusted evidence. The trusted owner may call `await reader.stop()`
+from another coroutine to cancel a fetch or render and permanently stop
+that reader. Closing the browser control connection triggers the launcher's
+container cleanup. To deploy this mode, install the matching broker and
+browser image from the same release.
 
 ## C04 download quarantine
 

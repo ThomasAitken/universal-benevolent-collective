@@ -62,13 +62,13 @@ def _container_options(name: str, cgroup: str) -> tuple[str, ...]:
 
 
 def podman_command(
-    name: str, image: str, child_fd: int, cgroup: str, endpoint: Path
+    name: str, image: str, child_fd: int, cgroup: str, endpoint: Path | None
 ) -> tuple[str, ...]:
     return (
         *_container_options(name, cgroup),
         f"--preserve-fd={child_fd}",
         "--network=none",
-        f"--volume={endpoint}:/run/ubc-egress:ro",
+        *((f"--volume={endpoint}:/run/ubc-egress:ro",) if endpoint is not None else ()),
         "--memory=1073741824",
         "--memory-swap=1073741824",
         "--cpus=1",
@@ -130,7 +130,7 @@ async def _startup(reader: asyncio.StreamReader) -> dict[str, object]:
         or not isinstance(message["session_id"], str)
         or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", message["session_id"])
         or not isinstance(message["origins"], list)
-        or not 1 <= len(message["origins"]) <= 32
+        or len(message["origins"]) > 32
         or not all(isinstance(origin, str) and len(origin) <= 270 for origin in message["origins"])
     ):
         raise ValueError("invalid browser startup request")
@@ -179,17 +179,20 @@ async def _serve(
         await client_writer.drain()
         async with asyncio.timeout(30):
             init = await _startup(client_reader)
-        await _launch(
-            client, client_reader, client_writer, image, name, cgroup, network, policy, init
-        )
+        connection = (client, client_reader, client_writer)
+        if init["origins"]:
+            await _launch(connection, image, name, cgroup, network, policy, init)
+        else:
+            await _launch_worker(connection, image, name, cgroup, init)
     finally:
         client_writer.close()
 
 
+Connection = tuple[socket.socket, asyncio.StreamReader, asyncio.StreamWriter]
+
+
 async def _launch(
-    client: socket.socket,
-    client_reader: asyncio.StreamReader,
-    client_writer: asyncio.StreamWriter,
+    connection: Connection,
     image: str,
     name: str,
     cgroup: str,
@@ -225,42 +228,64 @@ async def _launch(
                 await gate_writer.drain()
                 if await gate_reader.readexactly(6) != b"ready\n":
                     raise RuntimeError("egress gate did not start")
-            worker, worker_child = socket.socketpair()
-            with worker, worker_child:
-                process = await asyncio.create_subprocess_exec(
-                    *podman_command(name, image, worker_child.fileno(), cgroup, endpoint),
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    pass_fds=(worker_child.fileno(),),
-                )
-                worker_child.close()
-                worker_reader, worker_writer = await asyncio.open_connection(sock=worker)
-                try:
-                    worker_writer.write(_frame(init))
-                    await worker_writer.drain()
-                    tasks = [
-                        asyncio.create_task(_relay(client_reader, worker_writer)),
-                        asyncio.create_task(_relay(worker_reader, client_writer)),
-                        asyncio.create_task(_client_disconnected(client)),
+            await _launch_worker(
+                connection, image, name, cgroup, init, endpoint, (gate_reader, gate_process)
+            )
+        finally:
+            gate_writer.transport.abort()
+
+
+async def _launch_worker(
+    connection: Connection,
+    image: str,
+    name: str,
+    cgroup: str,
+    init: dict[str, object],
+    endpoint: Path | None = None,
+    gate: tuple[asyncio.StreamReader, asyncio.subprocess.Process] | None = None,
+) -> None:
+    client, client_reader, client_writer = connection
+    worker, worker_child = socket.socketpair()
+    with worker, worker_child:
+        process = await asyncio.create_subprocess_exec(
+            *podman_command(name, image, worker_child.fileno(), cgroup, endpoint),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            pass_fds=(worker_child.fileno(),),
+        )
+        worker_child.close()
+        worker_reader, worker_writer = await asyncio.open_connection(sock=worker)
+        try:
+            worker_writer.write(_frame(init))
+            await worker_writer.drain()
+            to_client = asyncio.create_task(_relay(worker_reader, client_writer))
+            tasks = [
+                asyncio.create_task(_relay(client_reader, worker_writer)),
+                to_client,
+                asyncio.create_task(_client_disconnected(client)),
+            ]
+            if gate is not None:
+                gate_reader, gate_process = gate
+                tasks.extend(
+                    [
                         asyncio.create_task(gate_reader.read(1)),
                         asyncio.create_task(gate_process.wait()),
                     ]
-                    process_exit = asyncio.create_task(process.wait())
-                    try:
-                        done, _ = await asyncio.wait(
-                            [*tasks, process_exit], return_when=asyncio.FIRST_COMPLETED
-                        )
-                        if done == {process_exit}:
-                            # A final worker reply can still be buffered after exit.
-                            await asyncio.wait({tasks[1]}, timeout=0.25)
-                    finally:
-                        for task in [*tasks, process_exit]:
-                            task.cancel()
-                        await asyncio.gather(*tasks, process_exit, return_exceptions=True)
-                finally:
-                    worker_writer.transport.abort()
+                )
+            process_exit = asyncio.create_task(process.wait())
+            try:
+                done, _ = await asyncio.wait(
+                    [*tasks, process_exit], return_when=asyncio.FIRST_COMPLETED
+                )
+                if done == {process_exit}:
+                    # A final worker reply can still be buffered after exit.
+                    await asyncio.wait({to_client}, timeout=0.25)
+            finally:
+                for task in [*tasks, process_exit]:
+                    task.cancel()
+                await asyncio.gather(*tasks, process_exit, return_exceptions=True)
         finally:
-            gate_writer.transport.abort()
+            worker_writer.transport.abort()
 
 
 def main() -> None:

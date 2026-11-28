@@ -59,6 +59,9 @@
         "audit_writer": {
           "$ref": "#/$defs/component"
         },
+        "browser_launcher": {
+          "$ref": "#/$defs/component"
+        },
         "download_quarantine": {
           "$ref": "#/$defs/component"
         },
@@ -79,6 +82,7 @@
         "supervisor",
         "executable_policy",
         "audit_writer",
+        "browser_launcher",
         "download_quarantine",
         "public_web_fetch",
         "node_key_interface"

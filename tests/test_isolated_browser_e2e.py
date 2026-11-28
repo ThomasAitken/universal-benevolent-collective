@@ -7,6 +7,8 @@ import signal
 import socket
 import subprocess
 import sys
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
@@ -15,7 +17,12 @@ import pytest
 
 from tests.egress_fixture import APPROVED, DENIED, DENIED_IP, DENIED_PORT, HTTP_PORT, TLS_PORT
 from ubc_node.browser.browser_contracts import BrowserSession, BrowserSessionState
-from ubc_node.browser.isolation.isolated_browser import IsolatedBrowserError, PodmanBrowserRuntime
+from ubc_node.browser.isolation import isolated_browser
+from ubc_node.browser.isolation.isolated_browser import (
+    IsolatedBrowserError,
+    IsolatedBrowserSession,
+    PodmanBrowserRuntime,
+)
 from ubc_node.browser.isolation.isolation_contracts import (
     BoundaryChannelKind,
     ChannelCapability,
@@ -37,6 +44,14 @@ from ubc_node.providers.agent_backend import (
     StructuredAgentBackend,
 )
 from ubc_node.release.release_manifest import load_release_manifest
+from ubc_node.research.page_reader import PageReader
+from ubc_node.research.public_web import (
+    FetchLimits,
+    FetchResult,
+    PublicWebFetcher,
+    Redirect,
+    WebReadError,
+)
 
 pytestmark = [
     pytest.mark.isolated_browser,
@@ -331,6 +346,8 @@ asyncio.run(run())
 import os
 import socket
 import sys
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 assert os.geteuid() == os.getegid() == 65532
 status = dict(line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines())
@@ -461,3 +478,123 @@ for request in (
         await asyncio.to_thread(_assert_denied_untouched)
     finally:
         await session.revoke()
+
+
+class _SnapshotFetcher(PublicWebFetcher):
+    async def fetch(
+        self, url: str, *, method: str = "GET", limits: FetchLimits | None = None
+    ) -> FetchResult:
+        assert method == "GET" and limits is not None
+        target = f"http://{DENIED}:{DENIED_PORT}/snapshot-resource"
+        html = f"""<!doctype html><html><head>
+            <title>Fixture title</title>
+            <base href="https://example.net/">
+            <link rel="stylesheet" href="{target}">
+            <meta http-equiv="refresh" content="0; url={target}">
+            </head><body>
+            <h1>Ordinary rendered page</h1>
+            <p>A static <strong>finding</strong>.</p>
+            <a href="javascript:void(0)">Ignored JS</a>
+            <a href="mailto:info@example.org">Ignored mail</a>
+            <a href="report#details" ping="{target}">Original report</a>
+            <img src="{target}" onerror="document.body.innerText = 'EVENT EXECUTED'">
+            <iframe src="{target}"></iframe>
+            <script src="{target}"></script>
+            <script>document.body.innerText = 'SCRIPT EXECUTED';</script>
+            <p>{"x" * 32_000}</p>
+            {" ".join(f'<a href="/link-{i}">Link {i}</a>' for i in range(49))}
+            <a href="PRICE_AND_DEMAND_202610_NSW1.csv">NSW1</a>
+            <a href="vic.csv">October 202610 VIC1</a>
+            </body></html>""".encode()
+        effective_url = "https://example.org/research/index"
+        return FetchResult(
+            url,
+            effective_url,
+            (Redirect(302, effective_url),),
+            200,
+            "text/html",
+            html,
+            datetime.now(UTC),
+        )
+
+
+async def test_offline_chromium_renders_sanitised_public_snapshot() -> None:
+    runtime, _ = _runtime()
+    reader = PageReader(_SnapshotFetcher(), runtime)
+    snapshot = await reader.read("https://example.org/start")
+    assert snapshot.title == "Fixture title"
+    assert "Ordinary rendered page" in snapshot.text and "A static finding." in snapshot.text
+    assert "EXECUTED" not in snapshot.text
+    assert snapshot.untrusted and snapshot.text_truncated and snapshot.links_truncated
+    assert len(snapshot.text) == 32_000 and len(snapshot.links) == 48
+    assert snapshot.links[0].label == "Original report"
+    assert snapshot.links[0].href == "https://example.org/research/report"
+    assert snapshot.retrieval.redirects == (Redirect(302, "https://example.org/research/index"),)
+    assert (await runtime.next_event()).kind == "isolated_browser_started"
+    assert (await runtime.next_event()).payload["reason"] == "snapshot rendered"
+    if os.environ.get("UBC_RUN_ISOLATION_ADMIN") == "1":
+        await asyncio.to_thread(_assert_denied_untouched)
+
+
+async def test_offline_chromium_filters_links_before_the_snapshot_limit() -> None:
+    runtime, _ = _runtime()
+    reader = PageReader(_SnapshotFetcher(), runtime)
+    filtered = await reader.read("https://example.org/start", link_query=" 202610 ")
+    assert filtered.link_query == "202610"
+    assert filtered.text_truncated and not filtered.links_truncated
+    assert [link.label for link in filtered.links] == ["NSW1", "October 202610 VIC1"]
+    assert filtered.links[0].href == "https://example.org/research/PRICE_AND_DEMAND_202610_NSW1.csv"
+
+    by_filename = await reader.read("https://example.org/start", link_query="price_and_demand")
+    assert [link.label for link in by_filename.links] == ["NSW1"]
+
+
+@pytest.mark.skipif(
+    os.environ.get("UBC_RUN_ISOLATION_ADMIN") != "1",
+    reason="requires root in a disposable Linux test host",
+)
+async def test_snapshot_stop_retires_an_inflight_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime, _ = _runtime()
+    launch = runtime.launch_snapshot
+    write_frame = isolated_browser.write_worker_frame
+    worker: IsolatedBrowserSession | None = None
+    container = ""
+    sent = asyncio.Event()
+
+    async def launch_blocked(session_id: str) -> IsolatedBrowserSession:
+        nonlocal worker, container
+        worker = await launch(session_id)
+        container = await asyncio.to_thread(_container)
+        config = json.loads(await asyncio.to_thread(_podman, "inspect", container))[0]
+        assert config["HostConfig"]["NetworkMode"] == "none"
+        assert not config["HostConfig"]["Binds"]
+        assert not await asyncio.to_thread(_podman, "ps", "--filter", "name=^ubc-egress-", "-q")
+        os.kill(int(config["State"]["Pid"]), signal.SIGSTOP)
+        return worker
+
+    async def record_write(writer: asyncio.StreamWriter, frame: Mapping[str, object]) -> None:
+        await write_frame(writer, frame)
+        if frame.get("operation") == "render_snapshot":
+            sent.set()
+
+    monkeypatch.setattr(runtime, "launch_snapshot", launch_blocked)
+    monkeypatch.setattr(isolated_browser, "write_worker_frame", record_write)
+    reader = PageReader(_SnapshotFetcher(), runtime)
+    read = asyncio.create_task(reader.read("https://example.org/start"))
+    try:
+        await asyncio.wait_for(sent.wait(), 60)
+        assert not read.done()
+        await asyncio.wait_for(reader.stop(), 5)
+        with pytest.raises(asyncio.CancelledError):
+            await read
+        assert worker is not None and worker.state is BrowserSessionState.REVOKED
+        with pytest.raises(WebReadError, match="has stopped"):
+            await reader.read("https://example.org/again")
+        await _wait_for_removal(container)
+        assert (await runtime.next_event()).kind == "isolated_browser_started"
+        assert (await runtime.next_event()).kind == "isolated_browser_ended"
+    finally:
+        await reader.stop()
+        await asyncio.gather(read, return_exceptions=True)
+        if worker is not None:
+            await worker.revoke()

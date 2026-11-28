@@ -39,6 +39,23 @@ idea of its own. It can explain why a new programme is worthwhile or propose
 joining work that already exists. Exercise both entry paths. Use the seeded
 path for the recorded NEM demo.
 
+### Source access during discovery
+
+The live snapshot smoke check hit a Cloudflare challenge on the AEMO
+homepage. AEMO's separately published NEMWeb price-and-demand directory
+and a sample CSV both returned HTTP 200 through the anonymous fetcher.
+Use this observation to guide feasibility checks while leaving the source
+inventory empty at the start of the acceptance run.
+[AEMO price and demand documentation](https://www.aemo.com.au/energy-systems/electricity/national-electricity-market-nem/data-nem/aggregated-data) ·
+[NEMWeb price and demand directory](https://www.nemweb.com.au/Reports/CURRENT/WebData/NEM/PRICEANDDEMAND/)
+
+The price-and-demand directory lists over 1,700 monthly regional files
+oldest first. The default snapshot shows up to 48 links. When discovery
+learns the publisher's filename convention, it can filter links by month
+or region before the cap applies. Record challenge responses and other
+access failures in the discovery trail so the charter can reflect which
+sources are usable.
+
 ## Research lifecycle
 
 1. **Discover a question.** The agent searches the public web, opens results

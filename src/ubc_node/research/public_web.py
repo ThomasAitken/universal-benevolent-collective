@@ -64,9 +64,11 @@ class FetchResult:
     content_type: str | None
     body: bytes
     retrieved_at: datetime
+    challenge_required: bool = False
 
 
-def _public_url(value: str, *, base: httpx.URL | None = None) -> httpx.URL:
+def public_https_url(value: str, *, base: httpx.URL | None = None) -> httpx.URL:
+    """Normalize an eligible HTTPS URL without resolving its destination."""
     if (
         not value
         or len(value) > _MAX_URL_LENGTH
@@ -208,7 +210,7 @@ class PublicWebFetcher:
         if method not in {"GET", "HEAD"}:
             raise WebReadError("only GET and HEAD are allowed")
         return await _fetch(
-            _public_url(url),
+            public_https_url(url),
             method=method,
             headers=_ANONYMOUS_HEADERS,
             limits=self._limits if limits is None else limits,
@@ -248,7 +250,7 @@ async def _fetch(
                                 raise WebReadError("redirect has no location")
                             if len(redirects) >= limits.max_redirects:
                                 raise WebReadError("redirect limit reached")
-                            url = _public_url(location, base=url)
+                            url = public_https_url(location, base=url)
                             redirects.append(Redirect(response.status, str(url)))
                             continue
                         body = (
@@ -256,6 +258,7 @@ async def _fetch(
                             if method == "HEAD"
                             else await _read_body(response, limits.max_body_bytes)
                         )
+                        mitigation = _header(response, b"cf-mitigated") or ""
                         return FetchResult(
                             requested_url,
                             str(url),
@@ -264,6 +267,7 @@ async def _fetch(
                             _header(response, b"content-type"),
                             body,
                             datetime.now(UTC),
+                            challenge_required=mitigation.strip().lower() == "challenge",
                         )
                 finally:
                     # The pool owns established TLS streams. Also close a TCP stream
@@ -328,7 +332,7 @@ def _extract_hits(
         if not isinstance(url, str) or not isinstance(title, str) or not isinstance(snippet, str):
             raise WebReadError("invalid search result")
         try:
-            public_url = _public_url(url)
+            public_url = public_https_url(url)
         except WebReadError:
             continue
         hits.append(SearchHit(str(public_url), title[:500], snippet[:2000]))

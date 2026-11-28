@@ -12,6 +12,7 @@ from ubc_node.browser.browser_contracts import BrowserSessionConfig, BrowserSess
 from ubc_node.browser.browser_security import LeaseConfig, SessionLease
 from ubc_node.browser.isolation.isolated_browser import ISOLATED_OPERATIONS
 from ubc_node.browser.isolation.isolated_egress import tunnel
+from ubc_node.browser.isolation.snapshot import render_chromium, snapshot_document
 from ubc_node.browser.stagehand_browser import StagehandBrowserAdapter
 from ubc_node.browser.supervised_browser import (
     WORKER_PROTOCOL_VERSION,
@@ -73,6 +74,30 @@ class _IsolatedWorkerService(BrowserWorkerService):
         return await super()._dispatch(operation, parameters)
 
 
+async def _serve_snapshot(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    async with asyncio.timeout(30):
+        await write_worker_frame(writer, {"version": WORKER_PROTOCOL_VERSION, "status": "ready"})
+        request = await read_worker_frame(reader)
+        parameters = request.get("parameters")
+        if (
+            type(request.get("version")) is not int
+            or request["version"] != WORKER_PROTOCOL_VERSION
+            or type(request.get("request_id")) is not int
+            or request["request_id"] != 1
+            or request.get("operation") != "render_snapshot"
+            or not isinstance(parameters, dict)
+        ):
+            raise BrowserWorkerError("invalid snapshot request")
+        document = snapshot_document(cast(Mapping[str, object], parameters))
+        result = await render_chromium(document)
+        await write_worker_frame(
+            writer,
+            {"version": WORKER_PROTOCOL_VERSION, "request_id": 1, "ok": True, "result": result},
+        )
+        # Wait for the node to accept the result and close the channel.
+        await reader.read(1)
+
+
 async def _serve(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
     try:
         init = await read_worker_frame(reader)
@@ -85,6 +110,10 @@ async def _serve(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> 
             or not all(isinstance(origin, str) for origin in cast(list[object], origins))
         ):
             raise BrowserWorkerError("invalid isolated startup frame")
+
+        if not origins:
+            await _serve_snapshot(reader, writer)
+            return
 
         async with _proxy() as endpoint:
             lease = SessionLease(LeaseConfig())

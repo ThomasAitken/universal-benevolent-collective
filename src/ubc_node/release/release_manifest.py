@@ -14,6 +14,7 @@ PRIMARY_ISOLATION_BACKEND = "linux-rootful-podman-service"
 _HEX_DIGITS = frozenset("0123456789abcdef")
 
 _CORE_COMPONENTS: Mapping[str, tuple[str, str]] = {
+    "browser_launcher": ("browser-runtime/broker.py", "broker:main"),
     "supervisor": ("src/ubc_node/core/supervisor.py", "ubc_node.core.supervisor:RunSupervisor"),
     "executable_policy": (
         "src/ubc_node/core/policy.py",

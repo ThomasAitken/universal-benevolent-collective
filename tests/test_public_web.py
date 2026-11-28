@@ -145,6 +145,7 @@ async def test_pins_each_hop_and_keeps_hostname_for_tls_and_host(
     )
     assert (result.status, result.content_type, result.body) == (200, "text/plain", b"data")
     assert result.retrieved_at.tzinfo is UTC
+    assert not result.challenge_required
     assert net.dns_calls == [
         ("source.example.", 443),
         ("source.example.", 443),
@@ -170,6 +171,16 @@ async def test_pins_each_hop_and_keeps_hostname_for_tls_and_host(
         assert b"authorization:" not in wire.outgoing.lower()
         assert b"x-subscription-token:" not in wire.outgoing.lower()
         assert b"x-api-key:" not in wire.outgoing.lower()
+
+
+async def test_fetch_reports_cloudflare_challenge_header(net: NetworkFixture) -> None:
+    net.outcomes = [
+        Wire(b"HTTP/1.1 403 Forbidden\r\nCf-Mitigated: Challenge\r\nContent-Length: 0\r\n\r\n")
+    ]
+    result = await PublicWebFetcher().fetch(URL)
+    assert result.status == 403
+    assert result.challenge_required
+    assert len(net.connections) == 1
 
 
 async def test_head_stays_head_after_redirect_and_ignores_advertised_body(
