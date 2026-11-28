@@ -24,6 +24,10 @@ _CORE_COMPONENTS: Mapping[str, tuple[str, str]] = {
         "src/ubc_node/release/node_keys.py",
         "ubc_node.release.node_keys:NodeKey",
     ),
+    "public_web_fetch": (
+        "src/ubc_node/research/public_web.py",
+        "ubc_node.research.public_web:PublicWebFetcher",
+    ),
     "download_quarantine": (
         "src/ubc_node/artifacts/quarantine.py",
         "ubc_node.artifacts.quarantine:DownloadQuarantine",

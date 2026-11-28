@@ -34,6 +34,7 @@ The trusted core consists of:
 - the executable policy evaluator;
 - the core audit writer;
 - the pilot quarantine and artifact release service;
+- the mediated public-web fetch and search transport;
 - the signing-only node-key interface;
 - the constitution version and content digest;
 - the dependency lock; and
@@ -226,6 +227,41 @@ terminates the parent, worker, runtime, broker, and gate separately. Both
 containers must be removed after termination. Discard the fixture host, or
 stop the launcher and remove the two fixture containers, fixture network,
 configuration and derived image before reusing it.
+
+## Mediated public reads and search
+
+`ubc_node.research.public_web.PublicWebFetcher` is a supervisor-side
+component for anonymous `GET` and `HEAD` requests. It accepts HTTPS DNS
+names on port 443. Each hop requires all resolved addresses to pass the
+public-unicast policy before TCP connects to a checked numeric address.
+TLS verifies the original hostname. Loopback, private and link-local
+addresses, multicast, and IPv6 translation or transition ranges are excluded
+by the address policy. Supply operator-controlled `excluded_networks` CIDRs
+for any additional management or internally routed ranges, including
+globally numbered addresses. The Lima host and guest management addresses
+fall within the default exclusions.
+
+The deadline spans DNS, connection setup, redirects and the final body.
+The defaults are 15 seconds, five redirects and a 2 MiB response body.
+The fetcher closes redirect responses without consuming their bodies and
+accepts `identity`, `gzip` and `deflate` encodings, bounding both wire and
+decompressed bytes to the body limit and rejecting unsupported or corrupt
+encodings. Successful reads return the normalized request and effective URLs,
+redirect history, HTTP status, content type, UTC retrieval time and bounded
+bytes. The bytes are untrusted input for the later sanitisation and quarantine
+paths. The existing Chromium egress policy continues to apply independently.
+
+The separate `SearchProvider` interface has an exact-query `FixtureSearch`
+for offline runs alongside live `BraveSearch` and `SerperSearch` adapters.
+Construct a live adapter with an operator-supplied key such as
+`BraveSearch(os.environ["BRAVE_SEARCH_API_KEY"])` or
+`SerperSearch(os.environ["SERPER_API_KEY"])`. Each adapter sends its key only
+to its fixed HTTPS search endpoint (`api.search.brave.com` or
+`google.serper.dev`) and refuses redirects. Each call fetches one batch within
+ten seconds and 512 KiB and returns up to 20 bounded hits. Hit URLs are
+candidates and must pass the fetcher's address checks when opened.
+[Brave Search API reference](https://api-dashboard.search.brave.com/api-reference/web/search/get) ·
+[Serper API](https://serper.dev/)
 
 ## C04 download quarantine
 

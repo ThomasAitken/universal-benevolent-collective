@@ -1,7 +1,7 @@
 {
   "browser_image": {
-    "build_context_sha256": "sha256:800b7c8378c59b2692bbfa31f63b89165101772c52254e2e6d8b7ed1634ccb86",
-    "digest": "sha256:d4f6fa7110286d487857f216ebf4be19aba6de9d4aeadd1ae007ed21975a4c85",
+    "build_context_sha256": "sha256:36c09ffebfb23b2c3abc2a856c1101b53d95e6c9529e2043ac0795e0c2142e2f",
+    "digest": "sha256:977e3a138a18ec3ec0e45b7b945d67c5bef609b50a52c922fc737a9800fdb755",
     "reference": "localhost/ubc-browser"
   },
   "constitution": {
@@ -11,13 +11,13 @@
   },
   "dependency_lock": {
     "path": "uv.lock",
-    "sha256": "sha256:3ff41e0487ab63988f76a0c9fb1529cc1296da613b949c6db2139b1c425136d9"
+    "sha256": "sha256:25a088bf7c892d26e40ed15efdc34a487b96ee70eddefbb7667e20fd39eef080"
   },
   "isolation": {
     "backend": "linux-rootful-podman-service",
     "contract_version": 2
   },
-  "release_id": "0.1.0-linux-pilot",
+  "release_id": "0.1.0-linux-public-web",
   "schema_version": 1,
   "trusted_core": {
     "audit_writer": {
@@ -39,6 +39,11 @@
       "entrypoint": "ubc_node.release.node_keys:NodeKey",
       "path": "src/ubc_node/release/node_keys.py",
       "sha256": "sha256:9707d63edef2ed4537c5d4e7f5763937662814dca19b2114a63530ab7d398530"
+    },
+    "public_web_fetch": {
+      "entrypoint": "ubc_node.research.public_web:PublicWebFetcher",
+      "path": "src/ubc_node/research/public_web.py",
+      "sha256": "sha256:3c4c708df7be02fdca5ff114dad02759d7a17de2f940fb2ce4a445ec08c7b045"
     },
     "supervisor": {
       "entrypoint": "ubc_node.core.supervisor:RunSupervisor",

@@ -68,6 +68,9 @@
         "node_key_interface": {
           "$ref": "#/$defs/component"
         },
+        "public_web_fetch": {
+          "$ref": "#/$defs/component"
+        },
         "supervisor": {
           "$ref": "#/$defs/component"
         }
@@ -77,6 +80,7 @@
         "executable_policy",
         "audit_writer",
         "download_quarantine",
+        "public_web_fetch",
         "node_key_interface"
       ],
       "type": "object"
