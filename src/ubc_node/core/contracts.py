@@ -42,6 +42,7 @@ class RunState(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    PAUSED = "paused"
 
 
 class ActionKind(StrEnum):
@@ -117,6 +118,10 @@ class EventKind(StrEnum):
     HANDOFF_COMPLETED = "handoff_completed"
     RUN_FINISHED = "run_finished"
     RESEARCH_RECORDED = "research_recorded"
+    RESEARCH_TOOL_STARTED = "research_tool_started"
+    RESEARCH_TOOL_FINISHED = "research_tool_finished"
+    RESEARCH_REDIRECT = "research_redirect"
+    RESEARCH_CHECKPOINT = "research_checkpoint"
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,7 +158,7 @@ class ModelUsage:
 
 @dataclass(frozen=True, slots=True)
 class RunBudget:
-    """Hard upper bounds enforced outside the model and browser."""
+    """Limits enforced by the supervisor for the capabilities it exposes."""
 
     max_steps: int = 10
     max_model_calls: int = 10
@@ -164,6 +169,9 @@ class RunBudget:
     max_duration_seconds: float = 300.0
     max_downloads: int = 5
     max_consecutive_failures: int = 3
+    max_search_queries: int = 20
+    max_page_reads: int = 20
+    max_web_bytes: int = 8 * 1024 * 1024
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -175,7 +183,13 @@ class RunBudget:
         ):
             if getattr(self, field_name) < 1:
                 raise ValueError(f"{field_name} must be at least 1")
-        for field_name in ("max_handoffs", "max_downloads"):
+        for field_name in (
+            "max_handoffs",
+            "max_downloads",
+            "max_search_queries",
+            "max_page_reads",
+            "max_web_bytes",
+        ):
             if getattr(self, field_name) < 0:
                 raise ValueError(f"{field_name} must not be negative")
         for field_name in ("max_estimated_cost_usd", "max_duration_seconds"):
@@ -364,6 +378,9 @@ class BudgetUsage:
     duration_seconds: float = 0.0
     downloads: int = 0
     consecutive_failures: int = 0
+    search_queries: int = 0
+    page_reads: int = 0
+    web_bytes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,7 +396,7 @@ class RunResult:
     error: str | None = None
 
     def __post_init__(self) -> None:
-        terminal_states = {RunState.COMPLETED, RunState.FAILED, RunState.CANCELLED}
+        terminal_states = {RunState.COMPLETED, RunState.FAILED, RunState.CANCELLED, RunState.PAUSED}
         if self.state not in terminal_states:
             raise ValueError("a run result must have a terminal state")
         if self.event_count < 1:

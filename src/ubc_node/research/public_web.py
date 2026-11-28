@@ -7,7 +7,7 @@ import math
 import re
 import socket
 import zlib
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol, cast
@@ -31,6 +31,25 @@ _DUAL_STACK_CONNECT_TIMEOUT_SECONDS = 5.0
 
 class WebReadError(ValueError):
     """The request was denied or could not be completed within the read boundary."""
+
+
+class WebByteBudgetExhausted(WebReadError):
+    """The run has insufficient capacity for a response body."""
+
+
+@dataclass(slots=True)
+class WebByteBudget:
+    """Count the greater of wire and decoded body bytes per response."""
+
+    remaining: int
+    used: int = 0
+
+    def charge(self, size: int) -> None:
+        charged = min(size, self.remaining)
+        self.remaining -= charged
+        self.used += charged
+        if charged < size:
+            raise WebByteBudgetExhausted("web byte budget exhausted")
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,10 +167,17 @@ class _PinnedBackend(httpcore.AsyncNetworkBackend):
         raise WebReadError("no approved address accepted the connection")
 
 
-async def _read_body(response: httpcore.Response, limit: int) -> bytes:
+async def _read_body(
+    response: httpcore.Response, limit: int, budget: WebByteBudget | None
+) -> bytes:
+    allowance = limit if budget is None else min(limit, budget.remaining)
     content_length = _header(response, b"content-length")
-    if content_length is not None and int(content_length) > limit:
-        raise WebReadError("response exceeds the body byte limit")
+    if content_length is not None:
+        declared = int(content_length)
+        if declared > limit:
+            raise WebReadError("response exceeds the body byte limit")
+        if budget is not None and declared > budget.remaining:
+            raise WebByteBudgetExhausted("web byte budget exhausted")
     encoding = (_header(response, b"content-encoding") or "identity").strip().lower()
     if encoding == "identity":
         decompressor = None
@@ -166,21 +192,24 @@ async def _read_body(response: httpcore.Response, limit: int) -> bytes:
     wire_bytes = 0
     try:
         async for chunk in response.aiter_stream():
+            previous_size = max(wire_bytes, len(body))
             wire_bytes += len(chunk)
+            if budget is not None:
+                budget.charge(max(wire_bytes, len(body)) - previous_size)
             if wire_bytes > limit:
                 raise WebReadError("response exceeds the body byte limit")
             if decompressor is None:
                 body.extend(chunk)
                 continue
-            remaining = limit - len(body)
+            remaining = allowance - len(body)
             piece = decompressor.decompress(chunk, remaining + 1)
+            if budget is not None:
+                budget.charge(max(wire_bytes, len(body) + len(piece)) - max(wire_bytes, len(body)))
             if len(piece) > remaining:
                 raise WebReadError("response exceeds the body byte limit")
             body.extend(piece)
-        if decompressor is not None:
-            body.extend(decompressor.flush())
-            if not decompressor.eof or len(body) > limit:
-                raise WebReadError("corrupt or oversize compressed response")
+        if decompressor is not None and not decompressor.eof:
+            raise WebReadError("corrupt or oversize compressed response")
     except zlib.error as error:
         raise WebReadError("corrupt compressed response") from error
     return bytes(body)
@@ -205,7 +234,13 @@ class PublicWebFetcher:
         self._excluded = tuple(ipaddress.ip_network(cidr) for cidr in excluded_networks)
 
     async def fetch(
-        self, url: str, *, method: str = "GET", limits: FetchLimits | None = None
+        self,
+        url: str,
+        *,
+        method: str = "GET",
+        limits: FetchLimits | None = None,
+        byte_budget: WebByteBudget | None = None,
+        on_redirect: Callable[[Redirect], None] | None = None,
     ) -> FetchResult:
         if method not in {"GET", "HEAD"}:
             raise WebReadError("only GET and HEAD are allowed")
@@ -215,6 +250,8 @@ class PublicWebFetcher:
             headers=_ANONYMOUS_HEADERS,
             limits=self._limits if limits is None else limits,
             excluded=self._excluded,
+            byte_budget=byte_budget,
+            on_redirect=on_redirect,
         )
 
 
@@ -226,6 +263,8 @@ async def _fetch(
     limits: FetchLimits,
     excluded: tuple[Network, ...],
     content: bytes | None = None,
+    byte_budget: WebByteBudget | None = None,
+    on_redirect: Callable[[Redirect], None] | None = None,
 ) -> FetchResult:
     requested_url = str(url)
     redirects: list[Redirect] = []
@@ -251,12 +290,15 @@ async def _fetch(
                             if len(redirects) >= limits.max_redirects:
                                 raise WebReadError("redirect limit reached")
                             url = public_https_url(location, base=url)
-                            redirects.append(Redirect(response.status, str(url)))
+                            redirect = Redirect(response.status, str(url))
+                            redirects.append(redirect)
+                            if on_redirect is not None:
+                                on_redirect(redirect)
                             continue
                         body = (
                             b""
                             if method == "HEAD"
-                            else await _read_body(response, limits.max_body_bytes)
+                            else await _read_body(response, limits.max_body_bytes, byte_budget)
                         )
                         mitigation = _header(response, b"cf-mitigated") or ""
                         return FetchResult(
@@ -288,7 +330,9 @@ class SearchHit:
 
 
 class SearchProvider(Protocol):
-    async def search(self, query: str, *, count: int = 10) -> tuple[SearchHit, ...]: ...
+    async def search(
+        self, query: str, *, count: int = 10, byte_budget: WebByteBudget | None = None
+    ) -> tuple[SearchHit, ...]: ...
 
 
 def _search_query(query: str, count: int) -> str:
@@ -347,7 +391,9 @@ class FixtureSearch:
     def __init__(self, results: Mapping[str, tuple[SearchHit, ...]]) -> None:
         self._results = dict(results)
 
-    async def search(self, query: str, *, count: int = 10) -> tuple[SearchHit, ...]:
+    async def search(
+        self, query: str, *, count: int = 10, byte_budget: WebByteBudget | None = None
+    ) -> tuple[SearchHit, ...]:
         return self._results.get(_search_query(query, count), ())[:count]
 
 
@@ -362,7 +408,9 @@ class BraveSearch:
         ]
         self._excluded = tuple(ipaddress.ip_network(cidr) for cidr in excluded_networks)
 
-    async def search(self, query: str, *, count: int = 10) -> tuple[SearchHit, ...]:
+    async def search(
+        self, query: str, *, count: int = 10, byte_budget: WebByteBudget | None = None
+    ) -> tuple[SearchHit, ...]:
         query = _search_query(query, count)
         url = httpx.URL(
             "https://api.search.brave.com/res/v1/web/search",
@@ -374,6 +422,7 @@ class BraveSearch:
             headers=self._headers,
             limits=FetchLimits(timeout_seconds=10, max_body_bytes=512 * 1024, max_redirects=0),
             excluded=self._excluded,
+            byte_budget=byte_budget,
         )
         if result.status != 200:
             raise WebReadError(f"search provider returned HTTP {result.status}")
@@ -401,7 +450,9 @@ class SerperSearch:
         ]
         self._excluded = tuple(ipaddress.ip_network(cidr) for cidr in excluded_networks)
 
-    async def search(self, query: str, *, count: int = 10) -> tuple[SearchHit, ...]:
+    async def search(
+        self, query: str, *, count: int = 10, byte_budget: WebByteBudget | None = None
+    ) -> tuple[SearchHit, ...]:
         query = _search_query(query, count)
         payload = json.dumps({"q": query, "num": count}).encode("utf-8")
         result = await _fetch(
@@ -411,6 +462,7 @@ class SerperSearch:
             content=payload,
             limits=FetchLimits(timeout_seconds=10, max_body_bytes=512 * 1024, max_redirects=0),
             excluded=self._excluded,
+            byte_budget=byte_budget,
         )
         if result.status != 200:
             raise WebReadError(f"search provider returned HTTP {result.status}")

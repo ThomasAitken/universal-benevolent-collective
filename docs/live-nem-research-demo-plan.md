@@ -192,6 +192,49 @@ security and integration boundaries.
 | 10. Linux VM rehearsal and saved NEM run | Rehearse the full seeded NEM run (and exercise the unseeded entry path) in a clean Linux VM with real models, live public sources, isolated Chromium, ClamAV, and containerised analysis. Commit the final results of the first successful run (exported report, provenance and audit summary, and run metadata, without credentials or private runtime state) into the repository. | Saved run artifacts satisfy every acceptance criterion below, the replication script is documented for user-supplied models, and `task check` passes. |
 | 11. Retire the single-node pilot and cut over docs | Remove the superseded synthetic single-node pilot fixture, fixed price-method demo scaffolding, and pilot-only docs while retaining the reusable isolation, quarantine, and container-analysis component gates. Update the `Taskfile`, runbooks, and top-level docs to make the live research workflow, saved NEM results, and replication script the main demo. | `task check` passes at 100% coverage with no stale pilot references, and the component isolation and container gates remain intact. |
 
+### Operating the research supervisor
+
+The mediated research supervisor provides search, page snapshots, model-call
+accounting, and checkpoints to a trusted Python workflow. Charter admission
+and the agent loop build on this interface in commits 4 and 5. The existing
+`ubc research` command continues to run the fixed-source pilot.
+
+Create a `ResearchProject` with a private project directory under `.ubc/`.
+Give a `ResearchSupervisor` that project, a search provider, and a factory
+that creates a fresh `PageReader` for each run. Each workflow receives a
+`ResearchRun` with `search`, `read_page`, `propose`, and `save_checkpoint`.
+The trusted workflow supplies the `TaskSpec` and its `RunBudget`.
+
+```sh
+uv run ubc research-activity .ubc/nem --follow
+uv run ubc research-stop .ubc/nem
+```
+
+The activity command prints JSON Lines with the run ID, operation, outcome,
+cumulative usage, validated redirect targets, and retained snapshots. It can
+read while multiple processes append to their own run journals under the
+same project directory. Treat search results, publisher text, and links
+as untrusted evidence.
+
+Duration, token usage, and attempted search, page, and model calls are bounded per run.
+The web byte meter covers search-provider and page response bodies, charging
+the larger of the wire and decoded byte counts per response. Headers and
+unread redirect bodies fall outside this meter. A network read may deliver
+a final chunk beyond the allowance, which the mediator rejects. Each model
+call reserves an upper bound supplied by the trusted adapter from its model
+pricing and request limits. Returned usage settles the reservation.
+Cancelled or failed calls with unknown usage retain their reservation.
+This is a local estimated-spend limit and relies on the adapter for a valid
+upper bound and on the provider for usage reporting.
+
+A budget pause records the reason and leaves prior evidence and checkpoints
+in the journal. Pass its run ID as `resume_from` to start a fresh bounded
+attempt for the same task. The workflow can restore progress from
+`previous_events` and chooses its next action. A project stop revokes all
+attempts sharing the project directory, including future ones. Active tools
+are cancelled and their snapshot sessions retired. The operator can inspect
+the committed records after revocation.
+
 ### Acceptance criteria for the recorded NEM demo
 
 The recorded demo passes when the saved repository artifacts and audit show:

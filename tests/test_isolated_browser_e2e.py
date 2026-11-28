@@ -7,7 +7,7 @@ import signal
 import socket
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
@@ -48,10 +48,12 @@ from ubc_node.research.page_reader import PageReader
 from ubc_node.research.public_web import (
     FetchLimits,
     FetchResult,
+    FixtureSearch,
     PublicWebFetcher,
     Redirect,
-    WebReadError,
+    WebByteBudget,
 )
+from ubc_node.research.supervisor import ResearchProject, ResearchRun, ResearchSupervisor
 
 pytestmark = [
     pytest.mark.isolated_browser,
@@ -482,7 +484,13 @@ for request in (
 
 class _SnapshotFetcher(PublicWebFetcher):
     async def fetch(
-        self, url: str, *, method: str = "GET", limits: FetchLimits | None = None
+        self,
+        url: str,
+        *,
+        method: str = "GET",
+        limits: FetchLimits | None = None,
+        byte_budget: WebByteBudget | None = None,
+        on_redirect: Callable[[Redirect], None] | None = None,
     ) -> FetchResult:
         assert method == "GET" and limits is not None
         target = f"http://{DENIED}:{DENIED_PORT}/snapshot-resource"
@@ -507,10 +515,15 @@ class _SnapshotFetcher(PublicWebFetcher):
             <a href="vic.csv">October 202610 VIC1</a>
             </body></html>""".encode()
         effective_url = "https://example.org/research/index"
+        redirect = Redirect(302, effective_url)
+        if on_redirect is not None:
+            on_redirect(redirect)
+        if byte_budget is not None:
+            byte_budget.charge(len(html))
         return FetchResult(
             url,
             effective_url,
-            (Redirect(302, effective_url),),
+            (redirect,),
             200,
             "text/html",
             html,
@@ -553,7 +566,9 @@ async def test_offline_chromium_filters_links_before_the_snapshot_limit() -> Non
     os.environ.get("UBC_RUN_ISOLATION_ADMIN") != "1",
     reason="requires root in a disposable Linux test host",
 )
-async def test_snapshot_stop_retires_an_inflight_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_project_stop_retires_an_inflight_snapshot_worker(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     runtime, _ = _runtime()
     launch = runtime.launch_snapshot
     write_frame = isolated_browser.write_worker_frame
@@ -580,16 +595,20 @@ async def test_snapshot_stop_retires_an_inflight_worker(monkeypatch: pytest.Monk
     monkeypatch.setattr(runtime, "launch_snapshot", launch_blocked)
     monkeypatch.setattr(isolated_browser, "write_worker_frame", record_write)
     reader = PageReader(_SnapshotFetcher(), runtime)
-    read = asyncio.create_task(reader.read("https://example.org/start"))
+    project = ResearchProject(tmp_path)
+    supervisor = ResearchSupervisor(project, FixtureSearch({}), lambda: reader)
+
+    async def workflow(run: ResearchRun) -> str:
+        await run.read_page("https://example.org/start")
+        return "snapshot read"
+
+    read = asyncio.create_task(supervisor.run(TaskSpec("snapshot", "Open source"), workflow))
     try:
         await asyncio.wait_for(sent.wait(), 60)
         assert not read.done()
-        await asyncio.wait_for(reader.stop(), 5)
-        with pytest.raises(asyncio.CancelledError):
-            await read
+        await asyncio.to_thread(ResearchProject(tmp_path).stop)
+        assert (await asyncio.wait_for(read, 5)).state is RunState.CANCELLED
         assert worker is not None and worker.state is BrowserSessionState.REVOKED
-        with pytest.raises(WebReadError, match="has stopped"):
-            await reader.read("https://example.org/again")
         await _wait_for_removal(container)
         assert (await runtime.next_event()).kind == "isolated_browser_started"
         assert (await runtime.next_event()).kind == "isolated_browser_ended"

@@ -31,11 +31,11 @@ deployment before live retrieval. Linux launch failures are terminal.
 
 The trusted core consists of:
 
-- the supervisor entry point;
+- the run supervisor and mediated research supervisor;
 - the executable policy evaluator;
 - the core audit writer;
 - the pilot quarantine and artifact release service;
-- the mediated public-web fetch and search transport;
+- the mediated public-web fetch and search transport and the page reader;
 - the root-owned browser launcher;
 - the signing-only node-key interface;
 - the constitution version and content digest;

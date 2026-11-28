@@ -16,6 +16,14 @@ _HEX_DIGITS = frozenset("0123456789abcdef")
 _CORE_COMPONENTS: Mapping[str, tuple[str, str]] = {
     "browser_launcher": ("browser-runtime/broker.py", "broker:main"),
     "supervisor": ("src/ubc_node/core/supervisor.py", "ubc_node.core.supervisor:RunSupervisor"),
+    "research_supervisor": (
+        "src/ubc_node/research/supervisor.py",
+        "ubc_node.research.supervisor:ResearchSupervisor",
+    ),
+    "page_reader": (
+        "src/ubc_node/research/page_reader.py",
+        "ubc_node.research.page_reader:PageReader",
+    ),
     "executable_policy": (
         "src/ubc_node/core/policy.py",
         "ubc_node.core.policy:PrototypePolicyEvaluator",

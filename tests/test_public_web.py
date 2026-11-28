@@ -21,6 +21,8 @@ from ubc_node.research.public_web import (
     SearchHit,
     SearchProvider,
     SerperSearch,
+    WebByteBudget,
+    WebByteBudgetExhausted,
     WebReadError,
 )
 
@@ -627,3 +629,46 @@ async def test_serper_adapter_allows_empty_or_partial_hits(net: NetworkFixture) 
     net.answers = [[PUBLIC_IP], [PUBLIC_IP]]
     assert await SerperSearch("serper-key").search("query") == ()
     assert await SerperSearch("serper-key").search("query", count=2) == (SearchHit(URL, "One", ""),)
+
+
+async def test_web_budget_counts_failed_and_decoded_responses(net: NetworkFixture) -> None:
+    payload = b"A" * 100
+    compressed = gzip.compress(payload)
+    response = b"HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: %d\r\n\r\n" % (
+        len(compressed),
+    )
+    budget = WebByteBudget(100)
+    net.answers *= 2
+    net.outcomes = [Wire(OK), Wire(response + compressed)]
+    await PublicWebFetcher().fetch(URL, byte_budget=budget)
+    with pytest.raises(WebByteBudgetExhausted, match="web byte budget"):
+        await PublicWebFetcher().fetch(URL, byte_budget=budget)
+    assert (budget.used, budget.remaining) == (100, 0)
+
+
+async def test_oversize_content_length_distinguishes_run_from_per_response_limit(
+    net: NetworkFixture,
+) -> None:
+    budget = WebByteBudget(3)
+    net.answers *= 4
+    net.outcomes = [Wire(OK), Wire(OK), Wire(OK), Wire(OK)]
+    with pytest.raises(WebByteBudgetExhausted, match="web byte budget"):
+        await PublicWebFetcher().fetch(URL, byte_budget=budget)
+    assert budget.used == 0
+    for remaining in (3, 2, 1):
+        with pytest.raises(WebReadError, match="body byte limit") as error:
+            await PublicWebFetcher(FetchLimits(max_body_bytes=2)).fetch(
+                URL, byte_budget=WebByteBudget(remaining)
+            )
+        assert type(error.value) is WebReadError
+
+
+@pytest.mark.parametrize("provider", [BraveSearch, SerperSearch])
+async def test_live_search_counts_response_body_bytes(
+    net: NetworkFixture, provider: type[BraveSearch] | type[SerperSearch]
+) -> None:
+    payload = b"{}"
+    net.outcomes = [json_reply(payload)]
+    budget = WebByteBudget(len(payload))
+    assert await provider("key").search("prices", byte_budget=budget) == ()
+    assert budget.used == len(payload)

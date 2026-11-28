@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from email.message import Message
@@ -19,6 +20,7 @@ from ubc_node.research.public_web import (
     FetchLimits,
     PublicWebFetcher,
     Redirect,
+    WebByteBudget,
     WebReadError,
     public_https_url,
 )
@@ -81,13 +83,22 @@ class PageReader:
         self._active: asyncio.Task[PageSnapshot] | None = None
         self._stopped = False
 
-    async def read(self, url: str, *, link_query: str = "") -> PageSnapshot:
+    async def read(
+        self,
+        url: str,
+        *,
+        link_query: str = "",
+        byte_budget: WebByteBudget | None = None,
+        on_redirect: Callable[[Redirect], None] | None = None,
+    ) -> PageSnapshot:
         """Read the page, optionally selecting links by case-insensitive substring."""
         if self._stopped:
             raise WebReadError("page reader has stopped")
         if self._active is not None:
             raise WebReadError("a page read is already active")
-        task = asyncio.create_task(self._read(url, normalize_link_query(link_query)))
+        task = asyncio.create_task(
+            self._read(url, normalize_link_query(link_query), byte_budget, on_redirect)
+        )
         self._active = task
         try:
             return await task
@@ -110,8 +121,16 @@ class PageReader:
                 task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
-    async def _read(self, url: str, link_query: str) -> PageSnapshot:
-        fetched = await self._fetcher.fetch(url, limits=self._limits)
+    async def _read(
+        self,
+        url: str,
+        link_query: str,
+        byte_budget: WebByteBudget | None,
+        on_redirect: Callable[[Redirect], None] | None,
+    ) -> PageSnapshot:
+        fetched = await self._fetcher.fetch(
+            url, limits=self._limits, byte_budget=byte_budget, on_redirect=on_redirect
+        )
         content_type = fetched.content_type or ""
         retrieval = PageRetrieval(
             requested_url=fetched.requested_url,

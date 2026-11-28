@@ -74,12 +74,20 @@
         "public_web_fetch": {
           "$ref": "#/$defs/component"
         },
+        "page_reader": {
+          "$ref": "#/$defs/component"
+        },
+        "research_supervisor": {
+          "$ref": "#/$defs/component"
+        },
         "supervisor": {
           "$ref": "#/$defs/component"
         }
       },
       "required": [
         "supervisor",
+        "research_supervisor",
+        "page_reader",
         "executable_policy",
         "audit_writer",
         "browser_launcher",

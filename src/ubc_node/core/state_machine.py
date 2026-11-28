@@ -15,12 +15,14 @@ _ALLOWED_TRANSITIONS: dict[RunState, frozenset[RunState]] = {
             RunState.COMPLETED,
             RunState.FAILED,
             RunState.CANCELLED,
+            RunState.PAUSED,
         }
     ),
     RunState.AWAITING_HUMAN: frozenset({RunState.RUNNING, RunState.FAILED, RunState.CANCELLED}),
     RunState.COMPLETED: frozenset(),
     RunState.FAILED: frozenset(),
     RunState.CANCELLED: frozenset(),
+    RunState.PAUSED: frozenset(),
 }
 
 

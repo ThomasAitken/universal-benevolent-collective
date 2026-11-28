@@ -2,12 +2,14 @@
 
 import argparse
 import asyncio
+import json
 import os
 import platform
 import sqlite3
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from time import sleep
 from typing import NoReturn
 
 from ubc_node import __version__
@@ -35,6 +37,7 @@ from ubc_node.release.release_manifest import (
     verify_release_manifest,
     write_release_manifest,
 )
+from ubc_node.research.supervisor import ResearchProject
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -82,6 +85,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--source", action="append", nargs=2, metavar=("ID", "URL"), required=True
     )
     research.add_argument("--model", help="OpenAI model name. Reads OPENAI_API_KEY.")
+    activity = subcommands.add_parser("research-activity", help="Inspect a project's run journal.")
+    activity.add_argument("project", type=Path)
+    activity.add_argument(
+        "--follow", action="store_true", help="Print new activity until interrupted."
+    )
+    stop = subcommands.add_parser("research-stop", help="Revoke a project's research authority.")
+    stop.add_argument("project", type=Path)
     demo = subcommands.add_parser("demo", help="Run or resume the Phase 5 fixture demonstration.")
     demo.add_argument(
         "--workspace",
@@ -138,6 +148,23 @@ def run(argv: Sequence[str] | None = None) -> int:
         print(f"Release manifest: {arguments.output}")
     elif arguments.command == "quarantine":
         return _run_quarantine(arguments)
+    elif arguments.command in {"research-activity", "research-stop"}:
+        try:
+            project = ResearchProject(arguments.project)
+            if arguments.command == "research-stop":
+                project.stop()
+                print(f"Research project stopped: {arguments.project}")
+            else:
+                if not arguments.follow and not arguments.project.is_dir():
+                    raise FileNotFoundError(
+                        f"research project directory not found: {arguments.project}"
+                    )
+                _print_research_activity(project, follow=arguments.follow)
+        except KeyboardInterrupt:
+            return 130
+        except (OSError, ValueError) as error:
+            print(f"research project failed: {error}", file=sys.stderr)
+            return 1
     elif arguments.command == "research":
         try:
             return asyncio.run(_run_research(arguments))
@@ -178,6 +205,18 @@ def run(argv: Sequence[str] | None = None) -> int:
         parser.print_help()
 
     return 0
+
+
+def _print_research_activity(project: ResearchProject, *, follow: bool) -> None:
+    sequences: dict[str, int] = {}
+    while True:
+        for event in project.activity():
+            if event.sequence > sequences.get(event.run_id, 0):
+                print(json.dumps(event.to_record(), ensure_ascii=True), flush=True)
+                sequences[event.run_id] = event.sequence
+        if not follow:
+            return
+        sleep(0.5)
 
 
 async def _run_research(arguments: argparse.Namespace) -> int:

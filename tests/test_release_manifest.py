@@ -41,6 +41,8 @@ def test_manifest_binds_every_required_input_and_verifies() -> None:
     components = cast(dict[str, object], manifest["trusted_core"])
     assert set(components) == {
         "supervisor",
+        "research_supervisor",
+        "page_reader",
         "executable_policy",
         "audit_writer",
         "browser_launcher",
@@ -201,6 +203,8 @@ def test_manifest_schema_declares_closed_required_contract() -> None:
     )
     assert set(schema["properties"]["trusted_core"]["required"]) == {
         "supervisor",
+        "research_supervisor",
+        "page_reader",
         "executable_policy",
         "audit_writer",
         "browser_launcher",
@@ -227,6 +231,8 @@ def test_browser_context_digest_tracks_nested_src_files_and_ignores_caches(
         "src/ubc_node/release/node_keys.py",
         "src/ubc_node/artifacts/quarantine.py",
         "src/ubc_node/research/public_web.py",
+        "src/ubc_node/research/supervisor.py",
+        "src/ubc_node/research/page_reader.py",
         "src/ubc_node/py.typed",
     ):
         file_path = tmp_path / relative_path

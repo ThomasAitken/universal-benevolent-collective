@@ -34,14 +34,16 @@ class JsonlEventLog:
             stream.flush()
             os.fsync(stream.fileno())
 
-    def read_all(self) -> tuple[RunEvent, ...]:
-        """Read all complete records, rejecting corrupt or non-object lines."""
+    def read_all(self, *, allow_incomplete_tail: bool = False) -> tuple[RunEvent, ...]:
+        """Read records, optionally skipping a concurrent writer's partial final line."""
         if not self.path.exists():
             return ()
 
         events: list[RunEvent] = []
-        with self.path.open(encoding="utf-8") as stream:
+        with self.path.open("rb") as stream:
             for line_number, line in enumerate(stream, start=1):
+                if allow_incomplete_tail and not line.endswith(b"\n"):
+                    break
                 try:
                     record = json.loads(line)
                     if not isinstance(record, dict):
